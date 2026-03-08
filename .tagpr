@@ -2,5 +2,5 @@
 	vPrefix = true
 	releaseBranch = main
 	release = draft
-	command = "make credits"
 	versionFile = -
+#    command = "make credits"
