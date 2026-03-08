@@ -1,0 +1,39 @@
+version: 2
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - main: ./cmd/hc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s -w -X github.com/skranpn/hc/cmd.version={{.Version}}
+
+archives:
+  - formats: ["zip"]
+    name_template: '{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    format_overrides:
+      - goos: linux
+        formats: ["tar.gz"]
+    files:
+      - LICENSE
+      - CREDITS
+      - README.md
+      - CHANGELOG.md
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  draft: true
+  replace_existing_draft: true

@@ -1,0 +1,30 @@
+###
+
+# @name CreateTodo
+
+POST http://localhost:3000/todos HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "test resource"
+}
+
+# @assert CreateTodo.response.status == 201
+@todoId = {{CreateTodo.response.body.id}}
+
+###
+
+# @name WaitForCompleted
+
+GET http://localhost:3000/todos/{{todoId}} HTTP/1.1
+
+# @until WaitForCompleted.response.body.completed == true interval 2 max 5
+# @assert WaitForCompleted.response.status == 200
+
+###
+
+# @name DeleteTodo
+
+DELETE http://localhost:3000/todos/{{todoId}} HTTP/1.1
+
+# @assert DeleteTodo.response.status == 204

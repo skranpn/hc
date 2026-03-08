@@ -1,0 +1,5 @@
+# @name GetTodos
+GET http://localhost:3000/todos HTTP/1.1
+
+# @assert GetTodos.response.status == 200
+# @assert GetTodos.response.headers.Content-Type == application/json

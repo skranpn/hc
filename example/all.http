@@ -1,0 +1,60 @@
+###
+
+# @name GetTodos
+
+GET http://localhost:3000/todos HTTP/1.1
+Content-Type: application/json
+
+# @assert GetTodos.response.status == 200
+# @assert GetTodos.response.body is array
+
+###
+
+# @name CreateTodo
+
+POST http://localhost:3000/todos HTTP/1.1
+Content-Type: application/json
+
+{
+  "title": "Buy groceries",
+  "completed": false
+}
+
+# @assert CreateTodo.response.status == 201
+@todoId = {{CreateTodo.response.body.id}}
+
+###
+
+# @name GetTodo
+
+GET http://localhost:3000/todos/{{todoId}} HTTP/1.1
+Content-Type: application/json
+
+# @assert GetTodo.response.status == 200
+# @assert GetTodo.response.body.title == Buy groceries
+
+###
+
+# @name UpdateTodo
+
+PUT http://localhost:3000/todos/{{todoId}} HTTP/1.1
+Content-Type: application/json
+
+{
+  "title": "Buy groceries and milk",
+  "completed": true
+}
+
+# @assert UpdateTodo.response.status == 200
+# @assert UpdateTodo.response.body.completed == true
+
+###
+
+# @name DeleteaTodo
+
+DELETE http://localhost:3000/todos/{{todoId}} HTTP/1.1
+Content-Type: application/json
+
+# @assert DeleteTodo.response.status == 204
+
+###
