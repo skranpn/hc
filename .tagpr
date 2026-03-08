@@ -3,3 +3,4 @@
 	releaseBranch = main
 	release = draft
 	command = "make credits"
+	versionFile = -
