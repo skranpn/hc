@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/go-envparse v0.1.0
 	github.com/spf13/cobra v1.10.2
 	github.com/theory/jsonpath v0.11.0
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/term v0.40.0
 )
 
