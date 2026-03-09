@@ -34,6 +34,7 @@ var runCmd = &cobra.Command{
 
 		httpFile, err := os.Open(args[0])
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "httpfile not found: %v\n", err)
 			return err
 		}
 		defer httpFile.Close()
@@ -69,6 +70,8 @@ var runCmd = &cobra.Command{
 		runner := hc.NewRunner(client, vm, repoter, pauseCtl,
 			hc.SetStopOnFailure(runConfig.StopOnFailure),
 			hc.SetStopOnError(runConfig.StopOnError),
+			hc.SetRequestTimeout(runConfig.RequestTimeout),
+			hc.SetInterval(runConfig.Interval),
 		)
 
 		// Parse HTTP file
@@ -123,6 +126,7 @@ func init() {
 	runCmd.Flags().StringVarP(&runConfig.Env, "env", "e", "", "Path to env file")
 	runCmd.Flags().StringVarP(&runConfig.Proxy, "proxy", "p", "", "Proxy URL")
 	runCmd.Flags().StringVarP(&runConfig.Out, "out", "o", "out", "Output directory for results")
+	runCmd.Flags().IntVarP(&runConfig.Interval, "interval", "i", 1000, "request interval, defaults to 1000 ms")
 	runCmd.Flags().BoolVar(&runConfig.StopOnFailure, "stop-on-failure", false, "Stop execution on assertion failure")
 	runCmd.Flags().BoolVar(&runConfig.StopOnError, "stop-on-error", false, "Stop execution on any error")
 	runCmd.Flags().BoolVar(&runConfig.ParallelExecution, "parallel", false, "Enable parallel execution of requests")

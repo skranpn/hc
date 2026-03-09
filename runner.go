@@ -23,22 +23,28 @@ func SetStopOnError(v bool) RunnerOption {
 }
 func SetRequestTimeout(t int) RunnerOption {
 	return func(r *Runner) {
-		r.timeout = t
+		r.timeout = time.Duration(t) * time.Second
+	}
+}
+func SetInterval(t int) RunnerOption {
+	return func(r *Runner) {
+		r.interval = time.Duration(t) * time.Millisecond
 	}
 }
 
 type Runner struct {
 	client   HttpClient
 	vm       *VariableManager
-	reporter *reporter
+	reporter *Reporter
 	pauseCtl *PauseController
 
 	stopOnFailure bool
 	stopOnError   bool
-	timeout       int
+	timeout       time.Duration
+	interval      time.Duration
 }
 
-func NewRunner(client HttpClient, vm *VariableManager, reporter *reporter, pauseCtl *PauseController, opts ...RunnerOption) *Runner {
+func NewRunner(client HttpClient, vm *VariableManager, reporter *Reporter, pauseCtl *PauseController, opts ...RunnerOption) *Runner {
 	runner := &Runner{
 		client:   client,
 		vm:       vm,
@@ -75,6 +81,7 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 		if r.stopOnFailure || r.stopOnError {
 			return err
 		}
+		return fmt.Errorf("%w%v", ignorable, err)
 	}
 
 	// 実行結果の出力
@@ -93,6 +100,10 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 		return err
 	}
 
+	if r.interval > 0 {
+		sleep(ctx, r.interval)
+	}
+
 	return nil
 }
 
@@ -108,7 +119,7 @@ func (r *Runner) run(ctx context.Context, req *HttpRequest) (*HttpResponse, erro
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		if r.timeout > 0 {
-			reqCtx, cancel = context.WithTimeout(ctx, time.Duration(r.timeout)*time.Second)
+			reqCtx, cancel = context.WithTimeout(ctx, r.timeout)
 			defer cancel()
 		}
 	}
@@ -160,7 +171,7 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 				)
 				r.reporter.Stderr(err)
 
-				time.Sleep(v.Interval)
+				sleep(ctx, v.Interval)
 
 				// run again
 				resp, err := r.run(ctx, req)
@@ -207,4 +218,17 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 	}
 
 	return nil
+}
+
+func sleep(ctx context.Context, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return contextCanceled
+		case <-timer.C:
+			return nil
+		}
+	}
 }

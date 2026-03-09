@@ -2,6 +2,7 @@ package hc
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"regexp"
 
@@ -192,7 +193,11 @@ func (pbe *ParallelBatch) Execute(ctx context.Context, requests []HttpRequest, r
 			req := requests[idx]
 
 			eg.Go(func() error {
-				return runner.RunWithContext(egCtx, &req)
+				err := runner.RunWithContext(egCtx, &req)
+				if !errors.Is(err, ignorable) {
+					return err
+				}
+				return nil
 			})
 		}
 
