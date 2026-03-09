@@ -143,25 +143,25 @@ func (vm *VariableManager) ReplaceVariables(input string) string {
 // {{$timestamp [offset option]}}
 
 const (
-	offset_ms = 1
-	offset_s  = offset_ms * 1000
-	offset_m  = offset_s * 60
-	offset_h  = offset_m * 60
-	offset_d  = offset_h * 24
-	offset_w  = offset_d * 7
-	offset_M  = offset_d * 30
-	offset_y  = offset_d * 365
+	// offset_ms = 1
+	offset_s = 1
+	offset_m = offset_s * 60
+	offset_h = offset_m * 60
+	offset_d = offset_h * 24
+	offset_w = offset_d * 7
+	offset_M = offset_d * 30
+	offset_y = offset_d * 365
 )
 
 var offsetOptionValue = map[string]int64{
-	"ms": offset_ms,
-	"s":  offset_s,
-	"m":  offset_m,
-	"h":  offset_h,
-	"d":  offset_d,
-	"w":  offset_w,
-	"M":  offset_M,
-	"y":  offset_y,
+	// "ms": offset_ms,
+	"s": offset_s,
+	"m": offset_m,
+	"h": offset_h,
+	"d": offset_d,
+	"w": offset_w,
+	"M": offset_M,
+	"y": offset_y,
 }
 
 func systemVariables(input string) string {

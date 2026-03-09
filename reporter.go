@@ -11,20 +11,20 @@ import (
 	"github.com/fatih/color"
 )
 
-type reporter struct {
+type Reporter struct {
 	out string
 	now time.Time
 }
 
-func NewReporter(out string) *reporter {
-	return &reporter{
+func NewReporter(out string) *Reporter {
+	return &Reporter{
 		out: out,
 		now: time.Now(),
 	}
 }
 
 // Stdout はリクエストの実行結果が標準出力に書かれます
-func (r *reporter) Stdout(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) (err error) {
+func (r Reporter) Stdout(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) (err error) {
 	if !metadata.Finish() {
 		fmt.Fprint(os.Stdout, "\033[s")
 		defer func() {
@@ -55,7 +55,7 @@ func (r *reporter) Stdout(req *HttpRequest, resp *HttpResponse, metadata Metadat
 }
 
 // Stderr は実行中に起きたエラーが標準エラー出力に書かれます
-func (r *reporter) Stderr(err error) {
+func (r Reporter) Stderr(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\r\n", err)
 	}
@@ -63,7 +63,7 @@ func (r *reporter) Stderr(err error) {
 
 // Current は HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
 // 直前に実行したリクエスト、レスポンスのみがファイルに書かれます
-func (r *reporter) Current(req *HttpRequest, resp *HttpResponse) error {
+func (r Reporter) Current(req *HttpRequest, resp *HttpResponse) error {
 	path, err := r.filepath("last", "txt")
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (r *reporter) Current(req *HttpRequest, resp *HttpResponse) error {
 
 // Result も HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
 // これまで実行したリクエスト、レスポンスがファイルに記録されます
-func (r *reporter) Result(req *HttpRequest, resp *HttpResponse) error {
+func (r Reporter) Result(req *HttpRequest, resp *HttpResponse) error {
 	path, err := r.filepath("result", "txt")
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func (r *reporter) Result(req *HttpRequest, resp *HttpResponse) error {
 }
 
 // Summary は実行したリクエストの結果を markdown の表形式となるようにファイルに出力します
-func (r *reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) error {
+func (r Reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) error {
 	var f *os.File
 
 	path, err := r.filepath("summary", "md")
@@ -128,7 +128,7 @@ func (r *reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata Metada
 }
 
 // Variable は実行時に使った変数をファイルに出力します
-func (r *reporter) Variable(variable map[string]string) error {
+func (r Reporter) Variable(variable map[string]string) error {
 	path, err := r.filepath("variable", "txt")
 	if err != nil {
 		return err
@@ -137,6 +137,7 @@ func (r *reporter) Variable(variable map[string]string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	for k, v := range variable {
 		f.Write(fmt.Appendf(nil, "%s=%s\n", k, v))
@@ -145,7 +146,7 @@ func (r *reporter) Variable(variable map[string]string) error {
 	return nil
 }
 
-func (r *reporter) filepath(name string, ext string) (string, error) {
+func (r Reporter) filepath(name string, ext string) (string, error) {
 	dir := filepath.Join(r.out, fmt.Sprint(r.now.Unix()))
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return "", err
@@ -153,7 +154,7 @@ func (r *reporter) filepath(name string, ext string) (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("%s.%s", name, ext)), nil
 }
 
-func (r *reporter) format(req *HttpRequest, resp *HttpResponse) string {
+func (r Reporter) format(req *HttpRequest, resp *HttpResponse) string {
 	name := req.Name
 	if name == "" {
 		name = fmt.Sprintf("%s %s", req.Method, req.URL)

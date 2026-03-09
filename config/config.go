@@ -4,6 +4,7 @@ type RunConfig struct {
 	Env               string
 	Proxy             string
 	Out               string
+	Interval          int
 	StopOnFailure     bool
 	StopOnError       bool
 	ParallelExecution bool

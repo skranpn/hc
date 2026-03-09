@@ -3,7 +3,6 @@ package hc
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"maps"
 	"slices"
 	"strconv"
@@ -148,7 +147,6 @@ func (a *Assertion) compareIs(left, right any) (bool, error) {
 		}
 
 		var arr []any
-		log.Printf("%s\r\n", leftStr)
 		return json.Unmarshal(b, &arr) == nil, nil
 	case "object":
 		if left == nil {
@@ -159,8 +157,6 @@ func (a *Assertion) compareIs(left, right any) (bool, error) {
 		if err != nil {
 			return false, nil
 		}
-
-		log.Printf("%s", b)
 
 		var obj map[string]any
 		return json.Unmarshal(b, &obj) == nil, nil
