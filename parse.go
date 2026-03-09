@@ -250,7 +250,6 @@ type Until struct {
 }
 
 func NewUntil(line string) (*Until, error) {
-	line = strings.TrimPrefix(line, "until ")
 	parts := strings.Fields(line)
 	m := make(map[string]int)
 
