@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skranpn/hc"
+	"github.com/skranpn/hc/metadata"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -236,7 +237,7 @@ func TestParseAssert(t *testing.T) {
 	if len(requests[0].Metadata) == 0 {
 		t.Fatal("No assert")
 	}
-	metadata, ok := requests[0].Metadata[0].(*hc.Assertion)
+	metadata, ok := requests[0].Metadata[0].(*metadata.Assertion)
 	if !ok {
 		t.Fatal("metadata is not assert")
 	}
@@ -273,7 +274,7 @@ func TestParseUntil(t *testing.T) {
 	if len(requests[0].Metadata) == 0 {
 		t.Fatal("No assert")
 	}
-	metadata, ok := requests[0].Metadata[0].(*hc.Until)
+	metadata, ok := requests[0].Metadata[0].(*metadata.Until)
 	if !ok {
 		t.Fatal("metadata is not until")
 	}
@@ -318,25 +319,46 @@ func TestParseVariable(t *testing.T) {
 	if len(requests[0].Metadata) != 2 {
 		t.Fatalf("invalid variable count, want: 2, got: %d", len(requests[0].Metadata))
 	}
-	metadata, ok := requests[0].Metadata[0].(*hc.Variable)
+	_metadata, ok := requests[0].Metadata[0].(*metadata.Variable)
 	if !ok {
 		t.Fatal("metadata[0] is not variable")
 	}
-	if metadata.Name != key1 {
-		t.Errorf("invalid name, want: %s, got: %s", key1, metadata.Name)
+	if _metadata.Name != key1 {
+		t.Errorf("invalid name, want: %s, got: %s", key1, _metadata.Name)
 	}
-	if metadata.Value != value1 {
-		t.Errorf("invalid value, want: %s, got: %s", value1, metadata.Value)
+	if _metadata.Value != value1 {
+		t.Errorf("invalid value, want: %s, got: %s", value1, _metadata.Value)
 	}
 
-	metadata, ok = requests[0].Metadata[1].(*hc.Variable)
+	_metadata, ok = requests[0].Metadata[1].(*metadata.Variable)
 	if !ok {
 		t.Fatal("metadata[1] is not variable")
 	}
-	if metadata.Name != key2 {
-		t.Errorf("invalid name, want: %s, got: %s", key2, metadata.Name)
+	if _metadata.Name != key2 {
+		t.Errorf("invalid name, want: %s, got: %s", key2, _metadata.Name)
 	}
-	if metadata.Value != value2 {
-		t.Errorf("invalid value, want: %s, got: %s", value2, metadata.Value)
+	if _metadata.Value != value2 {
+		t.Errorf("invalid value, want: %s, got: %s", value2, _metadata.Value)
+	}
+}
+
+func TestParseSkip(t *testing.T) {
+	testdata := `
+	# @name SkipThisRequest
+	GET http://example.com
+	# @skip if 1 == 1`
+
+	parser := hc.NewParser()
+	requests, err := parser.Parse(bytes.NewReader([]byte(testdata)))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(requests[0].Metadata) != 1 {
+		t.Fatalf("invalid metadata count, want: 1, got: %d", len(requests[0].Metadata))
+	}
+	_, ok := requests[0].Metadata[0].(*metadata.Skip)
+	if !ok {
+		t.Errorf("invalid metadata, want: skip, got: %t", requests[0].Metadata)
 	}
 }

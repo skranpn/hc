@@ -1,3 +1,6 @@
+@env = dev
+@deleteStatusCode = 204
+
 ###
 
 # @name GetTodos
@@ -50,11 +53,17 @@ Content-Type: application/json
 
 ###
 
+GET http://localhost:3000/todos HTTP/1.1
+
+# @skip if {{env}} == dev
+
+###
+
 # @name DeleteaTodo
 
 DELETE http://localhost:3000/todos/{{todoId}} HTTP/1.1
 Content-Type: application/json
 
-# @assert DeleteTodo.response.status == 204
+# @assert DeleteTodo.response.status == {{deleteStatusCode}}
 
 ###

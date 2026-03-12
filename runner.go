@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skranpn/hc/jsonpath"
+	"github.com/skranpn/hc/metadata"
 )
 
 type RunnerOption func(*Runner)
@@ -66,48 +67,99 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 	}()
 
 	//  Variable substitution
+	r.replaceVariables(req)
+
+	err = r.handlePreRequest(req)
+	if errors.Is(err, ErrSkip) {
+		r.reporter.Stdout(req, nil, req.Metadata)
+		r.reporter.Summary(req, nil, req.Metadata)
+		return nil
+	}
+
+	// skip したら sleep はなし
+	defer func() {
+		if r.interval > 0 {
+			sleep(ctx, r.interval)
+		}
+	}()
+
+	for {
+		resp, err := r.send(ctx, req)
+		defer func() {
+			r.reporter.Summary(req, resp, req.Metadata)
+		}()
+		if err != nil {
+			// context canceled なら終了
+			if errors.Is(err, contextCanceled) {
+				return err
+			}
+			// stopOnXXX でも停止
+			if r.stopOnFailure || r.stopOnError {
+				return err
+			}
+			// それ以外なら継続 (エラーを無視)
+			return fmt.Errorf("%w%v", ErrIgnorable, err)
+		}
+
+		// handleMetadata
+		err = r.handleMetadata(ctx, req, resp)
+		// 成功したら終了
+		if err == nil {
+			return nil
+		}
+		// context canceled なら終了
+		if errors.Is(err, contextCanceled) {
+			return err
+		}
+		// until のエラーならループ
+		if _, ok := errors.AsType[*ErrUntilAssert](err); ok {
+			continue
+		}
+		// それ以外のエラーで stopOnXXX なら終了
+		if r.stopOnFailure || r.stopOnError {
+			return err
+		}
+		// until 実行回数超えてたら終了
+		if errors.Is(err, ErrUntilExceedMaximumRetry) {
+			return nil
+		}
+	}
+}
+
+func (r *Runner) replaceVariables(req *HttpRequest) {
+	defer func() {
+		r.reporter.Variable(r.vm.variables)
+	}()
+
 	req.URL = r.vm.ReplaceVariables(req.URL)
 	for k, v := range req.Headers {
 		req.Headers[k] = r.vm.ReplaceVariables(v)
 	}
 	req.Body = r.vm.ReplaceVariables(req.Body)
 
-	// send request
-	resp, err := r.run(ctx, req)
-	if err != nil {
-		if errors.Is(err, contextCanceled) {
-			return err
-		}
-		if r.stopOnFailure || r.stopOnError {
-			return err
-		}
-		return fmt.Errorf("%w%v", ignorable, err)
+	for _, m := range req.Metadata {
+		m.Match(metadata.Cases{
+			Assertion: func(a *metadata.Assertion) error {
+				a.LeftPath = r.vm.ReplaceVariables(a.LeftPath)
+				a.RightValue = r.vm.ReplaceVariables(a.RightValue)
+				return nil
+			},
+			Until: func(u *metadata.Until) error {
+				u.Condition.LeftPath = r.vm.ReplaceVariables(u.Condition.LeftPath)
+				u.Condition.RightValue = r.vm.ReplaceVariables(u.Condition.RightValue)
+				return nil
+			},
+			Skip: func(s *metadata.Skip) error {
+				s.Condition.LeftPath = r.vm.ReplaceVariables(s.Condition.LeftPath)
+				s.Condition.RightValue = r.vm.ReplaceVariables(s.Condition.RightValue)
+				return nil
+			},
+			Variable: func(v *metadata.Variable) error { return nil },
+		})
 	}
-
-	// 実行結果の出力
-	defer func() {
-		err = errors.Join(err,
-			r.reporter.Result(req, resp),
-			r.reporter.Variable(r.vm.variables),
-		)
-	}()
-
-	err = r.handleMetadata(ctx, req, resp)
-	if errors.Is(err, contextCanceled) {
-		return err
-	}
-	if err != nil && (r.stopOnFailure || r.stopOnError) {
-		return err
-	}
-
-	if r.interval > 0 {
-		sleep(ctx, r.interval)
-	}
-
-	return nil
 }
 
-func (r *Runner) run(ctx context.Context, req *HttpRequest) (*HttpResponse, error) {
+func (r *Runner) send(ctx context.Context, req *HttpRequest) (*HttpResponse, error) {
 	r.pauseCtl.WaitIfPaused()
 
 	if err := ctx.Err(); err != nil {
@@ -126,94 +178,113 @@ func (r *Runner) run(ctx context.Context, req *HttpRequest) (*HttpResponse, erro
 
 	// Send request
 	resp, err := r.client.Send(reqCtx, req)
+	r.reporter.Result(req, resp, err)
+	r.reporter.Current(req, resp, err)
 	if err != nil {
 		return nil, err
 	}
-	r.reporter.Current(req, resp)
 
 	return resp, err
 }
 
-func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *HttpResponse) (err error) {
-	unifiedJSON := resp.buildUnifiedJSON()
+func (r *Runner) handlePreRequest(req *HttpRequest) (err error) {
+	for _, m := range req.Metadata {
+		err := m.Match(metadata.Cases{
+			Skip: func(s *metadata.Skip) error {
+				if ok, _ := s.Condition.Evaluate(""); ok {
+					return ErrSkip
+				}
+				return nil
+			},
+			Assertion: func(a *metadata.Assertion) error { return nil },
+			Until:     func(u *metadata.Until) error { return nil },
+			Variable:  func(v *metadata.Variable) error { return nil },
+		})
 
-	// 出力に metadata を含むのでここ
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *HttpResponse) (err error) {
+	// すべてのリクエストの Metadata を処理し終わってから &&
+	// until interval (sleep) よりも先に Stdout 出力をしたいので defer の順番はこう
+	defer func() {
+		if until, ok := errors.AsType[*ErrUntilAssert](err); ok {
+			sleep(ctx, until.Interval)
+		}
+	}()
 	defer func() {
 		err = errors.Join(err,
-			r.reporter.Summary(req, resp, req.Metadata),
+			// r.reporter.Summary(req, resp, req.Metadata),
 			r.reporter.Stdout(req, resp, req.Metadata),
 		)
 	}()
 
-	for _, metadata := range req.Metadata {
-		switch v := metadata.(type) {
-		case *Until:
-			defer func(metadata *Until) {
-				metadata.Finish = true
-			}(v)
+	unifiedJSON := resp.buildUnifiedJSON()
 
-			for v.CurrentAttempt = 1; v.CurrentAttempt < v.MaxRetry; v.CurrentAttempt++ {
-				_, err = v.Condition.Evaluate(resp, unifiedJSON)
+	for _, m := range req.Metadata {
+
+		err = m.Match(metadata.Cases{
+			Assertion: func(a *metadata.Assertion) error {
+				ok, err := a.Evaluate(unifiedJSON)
+				if err != nil && (r.stopOnFailure || r.stopOnError) {
+					return err
+				}
+				r.reporter.Stderr(err)
+
+				if !ok && r.stopOnFailure {
+					return fmt.Errorf("assertion failed: %s", a.Raw)
+				}
+
+				return nil
+			},
+			Until: func(u *metadata.Until) error {
+				u.CurrentAttempt++
+
+				ok, err := u.Condition.Evaluate(unifiedJSON)
 				if err != nil && (r.stopOnFailure || r.stopOnError) {
 					return err
 				}
 				r.reporter.Stderr(err)
 
 				// 成功したら抜ける
-				if v.Condition.Ok() {
-					break
+				if ok {
+					return nil
 				}
 
-				// 失敗したら次のリクエスト送信前に出力する
-				err = errors.Join(err,
-					r.reporter.Summary(req, resp, MetadataSlice{v}),
-					r.reporter.Stdout(req, resp, MetadataSlice{v}),
-				)
-				r.reporter.Stderr(err)
+				// 実行回数チェック
+				if u.CurrentAttempt >= u.MaxRetry {
+					if r.stopOnFailure {
+						return fmt.Errorf("until assertion failed: %s", u.Raw)
+					}
 
-				sleep(ctx, v.Interval)
-
-				// run again
-				resp, err := r.run(ctx, req)
-				if errors.Is(err, contextCanceled) {
-					return err
+					return ErrUntilExceedMaximumRetry
 				}
+
+				return &ErrUntilAssert{
+					Interval: u.Interval,
+				}
+			},
+			Variable: func(v *metadata.Variable) error {
+				var values map[string]any
+				values, err = jsonpath.All(unifiedJSON, v.JSONPaths())
 				if err != nil && (r.stopOnFailure || r.stopOnError) {
 					return err
 				}
 				r.reporter.Stderr(err)
 
-				// StopOnXXX を有効にしていないとき、resp が nil でここに来る可能性がある
-				// チェックしてから build する
-				if err == nil {
-					unifiedJSON = resp.buildUnifiedJSON()
-				}
-			}
+				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value), values)
 
-			if v.CurrentAttempt == v.MaxRetry && r.stopOnFailure {
-				return fmt.Errorf("until assertion failed: %s", v.Raw)
-			}
+				return nil
+			},
+		})
 
-		case *Assertion:
-			_, err = v.Evaluate(resp, unifiedJSON)
-			if err != nil && (r.stopOnFailure || r.stopOnError) {
-				return err
-			}
-			r.reporter.Stderr(err)
-
-			if v.NG && r.stopOnFailure {
-				return fmt.Errorf("assertion failed: %s", v.Raw)
-			}
-
-		case *Variable:
-			var values map[string]any
-			values, err = jsonpath.All(unifiedJSON, v.JSONPaths())
-			if err != nil && (r.stopOnFailure || r.stopOnError) {
-				return err
-			}
-			r.reporter.Stderr(err)
-
-			r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value), values)
+		if err != nil {
+			return err
 		}
 	}
 

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
+
+	"github.com/skranpn/hc/metadata"
 )
 
 type State int
@@ -60,7 +60,7 @@ func (p *parser) parseLine(line string) error {
 	trimmed := strings.TrimSpace(line)
 
 	// ### は区切り文字
-	if trimmed == "###" && p.currentReq != nil {
+	if trimmed == "###" && p.currentReq != nil && p.currentReq.IsValid() {
 		if p.currentReq.Body != "" {
 			p.currentReq.Body = strings.TrimSpace(p.currentReq.Body)
 		}
@@ -159,159 +159,13 @@ func (p *parser) handleMetadata(line string) error {
 		name := strings.TrimPrefix(line, "name ")
 		p.currentReq.Name = name
 
-	case strings.HasPrefix(line, "assert "):
-		// Syntax: assert <jsonPath> <operator> <value>
-		assert, err := handleAssert(line)
-		if err != nil {
-			return fmt.Errorf("failed tot parse assert, %w", err)
-		}
-		p.currentReq.Metadata = append(p.currentReq.Metadata, assert)
-
-	case strings.HasPrefix(line, "until "):
-		// Syntax: until <condition> interval <n> max <n>
-		until, err := handleUntil(line)
-		if err != nil {
-			return fmt.Errorf("failed to parse until, %w", err)
-		}
-		p.currentReq.Metadata = append(p.currentReq.Metadata, until)
-
 	default:
-		// Syntax: @<key> = <value>
-		v, err := handleVariable(line)
+		v, err := metadata.Parse(line)
 		if err != nil {
-			return fmt.Errorf("failed to parse variable, %w", err)
+			return fmt.Errorf("failed to parse metadata, %w", err)
 		}
 		p.currentReq.Metadata = append(p.currentReq.Metadata, v)
 	}
 
 	return nil
-}
-
-type MetadataType int
-
-const (
-	MetadataAssert MetadataType = iota
-	MetadataUntil
-	MetadataName
-	MetadataVariable
-)
-
-type Metadata interface {
-	Type() MetadataType
-}
-
-type MetadataSlice []Metadata
-
-func (m MetadataSlice) OK() bool {
-	ng := false
-	for _, metadata := range m {
-		switch v := metadata.(type) {
-		case *Until:
-			ng = ng || v.Condition.NG
-		case *Assertion:
-			ng = ng || v.NG
-		}
-	}
-
-	return !ng
-}
-
-func (m MetadataSlice) Finish() bool {
-	finish := true
-	for _, metadata := range m {
-		switch v := metadata.(type) {
-		case *Until:
-			finish = finish && v.Finish
-		}
-	}
-
-	return finish
-}
-
-func (m MetadataSlice) Status() string {
-	if m.OK() {
-		return "ok"
-	}
-	return "ng"
-}
-
-func handleAssert(line string) (*Assertion, error) {
-	expr := strings.TrimPrefix(line, "assert ")
-	return NewAssertion(expr)
-}
-
-type Until struct {
-	Raw            string
-	Condition      *Assertion
-	CurrentAttempt int
-	MaxRetry       int
-	Interval       time.Duration
-	Finish         bool
-}
-
-func NewUntil(line string) (*Until, error) {
-	parts := strings.Fields(line)
-	m := make(map[string]int)
-
-	for i, v := range parts {
-		m[v] = i
-	}
-
-	maxIdx, ok := m["max"]
-	if !ok {
-		return nil, fmt.Errorf("syntax error: until <condition> max <int> [interval <duration>]")
-	}
-	if len(parts) < maxIdx+2 {
-		return nil, fmt.Errorf("syntax error: until <condition> max <int> [interval <duration>]")
-	}
-	maxN, err := strconv.Atoi(parts[maxIdx+1])
-	if err != nil {
-		return nil, fmt.Errorf("syntax error: max value should be integer")
-	}
-
-	intervalN := time.Second
-	intervalIdx, ok := m["interval"]
-	if ok && len(parts) >= intervalIdx+2 {
-		intervalN, err = time.ParseDuration(parts[intervalIdx+1])
-		if err != nil {
-			n, err := strconv.Atoi(parts[intervalIdx+1])
-			if err != nil {
-				return nil, fmt.Errorf("syntax error: interval value should be duration string")
-			}
-			intervalN = time.Duration(n) * time.Second
-		}
-
-		if intervalN < 0 {
-			return nil, fmt.Errorf("duration should be positive")
-		}
-	}
-
-	idx := maxIdx
-	if intervalIdx != 0 && min(maxIdx, intervalIdx) == intervalIdx {
-		idx = intervalIdx
-	}
-	cond, err := NewAssertion(strings.Join(parts[0:idx], " "))
-	if err != nil {
-		return nil, err
-	}
-
-	return &Until{
-		Condition: cond,
-		MaxRetry:  maxN,
-		Interval:  intervalN,
-	}, nil
-
-}
-
-func (u *Until) Type() MetadataType {
-	return MetadataUntil
-}
-
-func handleUntil(line string) (*Until, error) {
-	line = strings.TrimPrefix(line, "until ")
-	return NewUntil(line)
-}
-
-func handleVariable(expression string) (*Variable, error) {
-	return NewVariable(expression)
 }
