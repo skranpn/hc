@@ -1,4 +1,4 @@
-package hc
+package metadata
 
 import (
 	"encoding/json"
@@ -27,7 +27,8 @@ type Assertion struct {
 	Operator   string // operator like <=, >, contains
 	LeftPath   string // JSONPath
 	RightValue string // can be string or number
-	NG         bool
+
+	ok bool
 }
 
 func NewAssertion(line string) (*Assertion, error) {
@@ -55,29 +56,29 @@ func NewAssertion(line string) (*Assertion, error) {
 }
 
 // Assertion is Metadata
-func (a *Assertion) Type() MetadataType {
-	return MetadataAssert
+func (a *Assertion) Match(c Cases) error {
+	return c.Assertion(a)
 }
 
-func (a *Assertion) Status() string {
-	if a.NG {
-		return "ng"
+func (a *Assertion) StatusText() string {
+	if a.ok {
+		return "ok"
 	}
-	return "ok"
+	return "ng"
 }
 
 func (a *Assertion) Ok() bool {
-	return !a.NG
+	return a.ok
 }
 
-func (a *Assertion) Evaluate(resp *HttpResponse, unifiedJson string) (result bool, err error) {
+func (a *Assertion) Evaluate(unifiedJson string) (result bool, err error) {
 	defer func() {
-		a.NG = !result
+		a.ok = result
 	}()
 
 	left, err := jsonpath.Get(unifiedJson, a.LeftPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to get value by %s, %v", a.LeftPath, err)
+		left = a.LeftPath
 	}
 
 	right, err := jsonpath.Get(unifiedJson, a.RightValue)

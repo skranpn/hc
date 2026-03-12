@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/skranpn/hc/metadata"
 )
 
 // HttpClient defines the interface for executing HTTP requests
@@ -133,7 +135,11 @@ type HttpRequest struct {
 	URL      string
 	Headers  map[string]string
 	Body     string
-	Metadata []Metadata
+	Metadata []metadata.Metadata
+}
+
+func (h *HttpRequest) IsValid() bool {
+	return h.URL != ""
 }
 
 type HttpResponse struct {

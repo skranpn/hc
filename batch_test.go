@@ -1,6 +1,10 @@
 package hc
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/skranpn/hc/metadata"
+)
 
 func TestParallelStages(t *testing.T) {
 	testdata := []struct {
@@ -19,7 +23,7 @@ func TestParallelStages(t *testing.T) {
 		// 2: GET, DELETE
 		{"variable deps", []HttpRequest{
 			{Name: "CREATE", Method: "POST", URL: "example.com/todos",
-				Metadata: []Metadata{&Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
+				Metadata: []metadata.Metadata{&metadata.Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
 			},
 			{Name: "GET", Method: "GET", URL: "example.com/todos/{{id}}"},
 			{Name: "DELETE", Method: "DELETE", URL: "example.com/todos/{{id}}"},
@@ -35,7 +39,7 @@ func TestParallelStages(t *testing.T) {
 		// 2: GET, DELETE
 		{"mixed deps", []HttpRequest{
 			{Name: "CREATE", Method: "POST", URL: "example.com/todos",
-				Metadata: []Metadata{&Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
+				Metadata: []metadata.Metadata{&metadata.Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
 			},
 			{Name: "GET", Method: "GET", URL: "example.com/todos/{{CREATE.response.body.id}}"},
 			{Name: "DELETE", Method: "DELETE", URL: "example.com/todos/{{id}}"},
@@ -45,7 +49,7 @@ func TestParallelStages(t *testing.T) {
 		{"all", []HttpRequest{
 			{Name: "healthcheck", Method: "GET", URL: "example.com/health"},
 			{Name: "CREATE", Method: "POST", URL: "example.com/todos",
-				Metadata: []Metadata{&Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
+				Metadata: []metadata.Metadata{&metadata.Variable{Name: "id", Value: "{{CREATE.response.body.id}}"}},
 			},
 			{Name: "GET", Method: "GET", URL: "example.com/todos/{{CREATE.response.body.id}}"},
 			{Name: "DELETE", Method: "DELETE", URL: "example.com/todos/{{id}}"},

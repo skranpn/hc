@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/skranpn/hc/metadata"
 )
 
 type Reporter struct {
@@ -24,15 +25,18 @@ func NewReporter(out string) *Reporter {
 }
 
 // Stdout はリクエストの実行結果が標準出力に書かれます
-func (r Reporter) Stdout(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) (err error) {
-	if !metadata.Finish() {
+func (r Reporter) Stdout(req *HttpRequest, resp *HttpResponse, _metadata metadata.MetadataSlice) (err error) {
+	if !_metadata.Finish() {
 		fmt.Fprint(os.Stdout, "\033[s")
 		defer func() {
 			_, err = fmt.Fprint(os.Stdout, "\033[u")
 		}()
 	}
 
-	if metadata.OK() {
+	if _metadata.Skipped() {
+		c := color.New(color.FgYellow, color.Bold)
+		c.Print("● ")
+	} else if _metadata.OK() {
 		c := color.New(color.FgGreen, color.Bold)
 		c.Print("● ")
 	} else {
@@ -40,15 +44,32 @@ func (r Reporter) Stdout(req *HttpRequest, resp *HttpResponse, metadata Metadata
 		c.Print("● ")
 	}
 
-	fmt.Fprintf(os.Stdout, "%d %s\r\n", resp.StatusCode, req.Name)
+	name := req.Name
+	if name == "" {
+		name = fmt.Sprintf("%s %s", req.Method, req.URL)
+	}
+	if resp == nil {
+		fmt.Fprintf(os.Stdout, "%s\r\n", name)
+	} else {
+		fmt.Fprintf(os.Stdout, "%d %s\r\n", resp.StatusCode, name)
+	}
 
-	for _, m := range metadata {
-		switch v := m.(type) {
-		case *Until:
-			fmt.Fprintf(os.Stdout, "  └ [%d/%d] %s: %s\r\n", v.CurrentAttempt, v.MaxRetry, v.Condition.Raw, v.Condition.Status())
-		case *Assertion:
-			fmt.Fprintf(os.Stdout, "  └ %s, %s\r\n", v.Raw, v.Status())
-		}
+	for _, m := range _metadata {
+		m.Match(metadata.Cases{
+			Until: func(u *metadata.Until) error {
+				fmt.Fprintf(os.Stdout, "  └ [%d/%d] %s: %s\r\n", u.CurrentAttempt, u.MaxRetry, u.Condition.Raw, u.Condition.StatusText())
+				return nil
+			},
+			Assertion: func(a *metadata.Assertion) error {
+				fmt.Fprintf(os.Stdout, "  └ %s, %s\r\n", a.Raw, a.StatusText())
+				return nil
+			},
+			Skip: func(s *metadata.Skip) error {
+				fmt.Fprintf(os.Stdout, "  └ %s, skipped \r\n", s.Condition.Raw)
+				return nil
+			},
+			Variable: func(v *metadata.Variable) error { return nil },
+		})
 	}
 
 	return nil
@@ -63,7 +84,7 @@ func (r Reporter) Stderr(err error) {
 
 // Current は HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
 // 直前に実行したリクエスト、レスポンスのみがファイルに書かれます
-func (r Reporter) Current(req *HttpRequest, resp *HttpResponse) error {
+func (r Reporter) Current(req *HttpRequest, resp *HttpResponse, arg_err error) error {
 	path, err := r.filepath("last", "txt")
 	if err != nil {
 		return err
@@ -74,13 +95,13 @@ func (r Reporter) Current(req *HttpRequest, resp *HttpResponse) error {
 	}
 	defer f.Close()
 
-	_, err = f.Write([]byte(r.format(req, resp)))
+	_, err = f.Write([]byte(r.format(req, resp, arg_err)))
 	return err
 }
 
 // Result も HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
 // これまで実行したリクエスト、レスポンスがファイルに記録されます
-func (r Reporter) Result(req *HttpRequest, resp *HttpResponse) error {
+func (r Reporter) Result(req *HttpRequest, resp *HttpResponse, err error) error {
 	path, err := r.filepath("result", "txt")
 	if err != nil {
 		return err
@@ -91,12 +112,12 @@ func (r Reporter) Result(req *HttpRequest, resp *HttpResponse) error {
 	}
 	defer f.Close()
 
-	_, err = f.Write([]byte(r.format(req, resp)))
+	_, err = f.Write([]byte(r.format(req, resp, err)))
 	return err
 }
 
 // Summary は実行したリクエストの結果を markdown の表形式となるようにファイルに出力します
-func (r Reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata MetadataSlice) error {
+func (r Reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata metadata.MetadataSlice) error {
 	var f *os.File
 
 	path, err := r.filepath("summary", "md")
@@ -123,7 +144,11 @@ func (r Reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata Metadat
 	if metadata != nil {
 		status = metadata.Status()
 	}
-	_, err = f.Write(fmt.Appendf(nil, "| %s | %s | %d | %s |\n", req.Method, req.URL, resp.StatusCode, status))
+	statusCode := "N/A"
+	if resp != nil {
+		statusCode = fmt.Sprint(resp.StatusCode)
+	}
+	_, err = f.Write(fmt.Appendf(nil, "| %s | %s | %s | %s |\n", req.Method, req.URL, statusCode, status))
 	return err
 }
 
@@ -154,7 +179,7 @@ func (r Reporter) filepath(name string, ext string) (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("%s.%s", name, ext)), nil
 }
 
-func (r Reporter) format(req *HttpRequest, resp *HttpResponse) string {
+func (r Reporter) format(req *HttpRequest, resp *HttpResponse, err error) string {
 	name := req.Name
 	if name == "" {
 		name = fmt.Sprintf("%s %s", req.Method, req.URL)
@@ -168,11 +193,18 @@ func (r Reporter) format(req *HttpRequest, resp *HttpResponse) string {
 	request := fmt.Sprintf("%s %s\n%s\n%s", req.Method, req.URL, reqHeaders.String(), string(req.Body))
 
 	// response
-	var respHeaders strings.Builder
-	for k, v := range resp.Header {
-		fmt.Fprintf(&respHeaders, "%s: %s\n", k, v[0])
+	var response string
+	if err != nil {
+		response = err.Error()
+	} else if resp == nil {
+		response = "response is null"
+	} else {
+		var respHeaders strings.Builder
+		for k, v := range resp.Header {
+			fmt.Fprintf(&respHeaders, "%s: %s\n", k, v[0])
+		}
+		response = fmt.Sprintf("%s %d %s\n%s\n%s", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode), respHeaders.String(), string(resp.Body))
 	}
-	response := fmt.Sprintf("%s %d %s\n%s\n%s", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode), respHeaders.String(), string(resp.Body))
 
 	return fmt.Sprintf("## %s\n\n%s\n\n%s\n\n", name, request, response)
 }

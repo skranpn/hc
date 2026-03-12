@@ -6,6 +6,7 @@ import (
 	"maps"
 	"regexp"
 
+	"github.com/skranpn/hc/metadata"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,9 +60,9 @@ func (dr *DependencyResolver) BuildExecutionPlan() [][]int {
 		}
 
 		// variable として保存したもの
-		for _, metadata := range req.Metadata {
-			switch v := metadata.(type) {
-			case *Variable:
+		for _, m := range req.Metadata {
+			switch v := m.(type) {
+			case *metadata.Variable:
 				definedVars[v.Name] = i
 			}
 		}
@@ -194,7 +195,7 @@ func (pbe *ParallelBatch) Execute(ctx context.Context, requests []HttpRequest, r
 
 			eg.Go(func() error {
 				err := runner.RunWithContext(egCtx, &req)
-				if !errors.Is(err, ignorable) {
+				if !errors.Is(err, ErrIgnorable) {
 					return err
 				}
 				return nil
