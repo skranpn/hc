@@ -22,41 +22,6 @@ var (
 	systemVarRegex = regexp.MustCompile(`\{\{\$(\w+)\}\}`)
 )
 
-// type Variable struct {
-// 	Name  string
-// 	Value string
-
-// 	jsonpaths []string
-// }
-
-// func NewVariable(expr string) (*Variable, error) {
-// 	parts := strings.Fields(expr)
-// 	if len(parts) < 3 {
-// 		return nil, fmt.Errorf("syntax error: @<name> = <value>")
-// 	}
-
-// 	v := &Variable{
-// 		Name:  parts[0],
-// 		Value: strings.Join(parts[2:], " "),
-// 	}
-
-// 	for _, match := range jsonpathVarRegex.FindAllStringSubmatch(v.Value, -1) {
-// 		if len(match) > 1 {
-// 			v.jsonpaths = append(v.jsonpaths, match[1])
-// 		}
-// 	}
-
-// 	return v, nil
-// }
-
-// func (v *Variable) JSONPaths() []string {
-// 	return v.jsonpaths
-// }
-
-// func (v *Variable) Type() MetadataType {
-// 	return MetadataVariable
-// }
-
 type VariableManager struct {
 	variables         map[string]string
 	jsonpathVariables map[string]string
