@@ -73,7 +73,7 @@ Metadata lines are placed after the request (before the next `###`). They can be
 
 #### `@name` Request name
 
-Give a request a name to reference its response in later requests.
+Give a request name to reference its response in later requests.
 
 ```http
 # @name CreateTodo
@@ -139,7 +139,7 @@ Retry the request until the condition is met, up to a maximum number of attempts
 
 ```http
 # @name WaitForJob
-GET https://example.com/{{todoId}}
+GET https://example.com/todos/{{todoId}}
 
 # @until WaitForJob.response.body.status == done max 10 interval 5
 # @assert WaitForJob.response.status == 200
@@ -214,7 +214,7 @@ hc run [flags] <http_file>
 | --out             | -o    | out     | Output directory for results                                                   |
 | --interval        | -i    | 1000    | Interval between requests (milliseconds)                                       |
 | --stop-on-failure |       | false   | Stop execution on assertion failure                                            |
-| --stop-on-any     |       | false   | Stop execution on any error                                                    |
+| --stop-on-error   |       | false   | Stop execution on any error                                                    |
 | --parallel        |       | false   | (Experimental) Enable parallel execution (respects inter-request dependencies) |
 | --jobs            | -j    | 4       | Max concurrent requests when --parallel is enabled                             |
 | --request-timeout |       | 30      | Timeout per request in seconds (0 = no timeout)                                |
