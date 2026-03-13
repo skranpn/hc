@@ -12,3 +12,7 @@ type RunConfig struct {
 	RequestTimeout    int
 	TotalTimeout      int
 }
+
+type LintConfig struct {
+	Env string
+}
