@@ -21,8 +21,11 @@ var runCmd = &cobra.Command{
 	Use:   "run [http_files ...]",
 	Short: "Run API tests defined in HTTP files",
 	Long:  `Run API tests defined in HTTP files.`,
-	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+
 		// Create context with timeout if specified
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
