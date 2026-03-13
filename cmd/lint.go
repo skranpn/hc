@@ -15,6 +15,10 @@ var lintCmd = &cobra.Command{
 	Use:   "lint [http_files ...]",
 	Short: "Static analysis of HTTP files",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+
 		env, err := hc.LoadEnvFile(lintConfig.Env)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to load env file: %v\n", err)
