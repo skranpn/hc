@@ -12,7 +12,7 @@ go install github.com/skranpn/hc/cmd/hc@latest
 
 Create a file `api.http`:
 
-```http
+```
 # @name GET
 GET https://example.com
 
@@ -49,7 +49,7 @@ The HTTP version (HTTP/1.1) may optionally be appended to the request line.
 
 Use `###` to separate multiple requests in a single file. Requests are executed top to bottom.
 
-```http
+```
 # @name CreateTodo
 
 POST https://example.com/todos
@@ -75,7 +75,7 @@ Metadata lines are placed after the request (before the next `###`). They can be
 
 Give a request name to reference its response in later requests.
 
-```http
+```
 # @name CreateTodo
 POST https://example.com/todos
 Content-Type: application/json
@@ -94,7 +94,7 @@ Assert a condition against the response. Failed assertions are reported but do n
 # @assert <path> <operator> <value>
 ```
 
-```http
+```
 # @name GetTodos
 GET https://example.com/todos
 
@@ -119,7 +119,7 @@ Operators:
 
 Extract a value from the response and store it as a variable for use in subsequent requests.
 
-```http
+```
 # @name CreateTodo
 POST https://example.com/todos
 Content-Type: application/json
@@ -137,7 +137,7 @@ Retry the request until the condition is met, up to a maximum number of attempts
 # @until <path> <operator> <value> max <n> [interval <n>]
 ```
 
-```http
+```
 # @name WaitForJob
 GET https://example.com/todos/{{todoId}}
 
@@ -155,7 +155,7 @@ Skip the request when the condition is true.
 # @skip if <path> <operator> <value>
 ```
 
-```http
+```
 GET https://example.com/todos
 
 # @skip if {{ENV}} == dev
@@ -178,9 +178,23 @@ BASE_URL=https://example.com
 ENV=dev
 ```
 
+#### Assigned varialbe reference
+
+Reference a value from an assigned variable defined as `@variableName = variableValue`:
+
+```
+{{variableName}}
+```
+
 #### Previous response reference
 
-Reference a value from a previous response using its request name and JSONPath.
+Reference a value from a previous response using its request name and JSONPath:
+
+```
+{{RquestName.body.response.status}}
+{{RquestName.body.response.body.field}}
+{{RquestName.body.response.headers.Content-Type}}
+```
 
 #### System variables
 
