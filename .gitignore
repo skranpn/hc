@@ -1,2 +1,4 @@
 # Added by goreleaser init:
 dist/
+
+third_party_licenses
