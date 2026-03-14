@@ -23,9 +23,8 @@ archives:
         formats: ["tar.gz"]
     files:
       - LICENSE
-      - CREDITS
       - README.md
-      - CHANGELOG.md
+      - third_party_licenses/**/*
 
 changelog:
   sort: asc
