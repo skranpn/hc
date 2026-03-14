@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.1.0](https://github.com/skranpn/hc/compare/v0.0.5...v0.1.0) - 2026-03-14
+- fix system variable parse logic by @skranpn in https://github.com/skranpn/hc/pull/13
+- add --only option by @skranpn in https://github.com/skranpn/hc/pull/15
+- add check-license workflow, use go-licenses to consolidate the license files by @skranpn in https://github.com/skranpn/hc/pull/16
+
 ## [v0.0.5](https://github.com/skranpn/hc/compare/v0.0.4...v0.0.5) - 2026-03-13
 - update README.md by @skranpn in https://github.com/skranpn/hc/pull/10
 - fix typo by @skranpn in https://github.com/skranpn/hc/pull/12
