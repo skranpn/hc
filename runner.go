@@ -270,6 +270,8 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 				}
 			},
 			Variable: func(v *metadata.Variable) error {
+				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value))
+
 				var values map[string]any
 				values, err = jsonpath.All(unifiedJSON, v.JSONPaths())
 				if err != nil && (r.stopOnFailure || r.stopOnError) {
@@ -277,7 +279,7 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 				}
 				r.reporter.Stderr(err)
 
-				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value), values)
+				r.vm.SetJSONPaths(values)
 
 				return nil
 			},
