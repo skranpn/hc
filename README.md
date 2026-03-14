@@ -224,15 +224,16 @@ hc run [flags] <http_file>
 | Flag              | Short | Default | Description                                                                    |
 | ----------------- | ----- | ------- | ------------------------------------------------------------------------------ |
 | --env             | -e    |         | Path to env file                                                               |
-| --proxy           | -p    |         | Proxy URL                                                                      |
-| --out             | -o    | out     | Output directory for results                                                   |
 | --interval        | -i    | 1000    | Interval between requests (milliseconds)                                       |
+| --out             | -o    | out     | Output directory for results                                                   |
+| --proxy           | -p    |         | Proxy URL                                                                      |
+| --only            |       |         | Execute only specified requests in the order they are given.                   |
 | --stop-on-failure |       | false   | Stop execution on assertion failure                                            |
 | --stop-on-error   |       | false   | Stop execution on any error                                                    |
-| --parallel        |       | false   | (Experimental) Enable parallel execution (respects inter-request dependencies) |
-| --jobs            | -j    | 4       | Max concurrent requests when --parallel is enabled                             |
 | --request-timeout |       | 30      | Timeout per request in seconds (0 = no timeout)                                |
 | --total-timeout   |       | 0       | Total execution timeout in seconds (0 = no timeout)                            |
+| --parallel        |       | false   | (Experimental) Enable parallel execution (respects inter-request dependencies) |
+| --jobs            | -j    | 4       | Max concurrent requests when --parallel is enabled                             |
 
 ### Interactive controls
 

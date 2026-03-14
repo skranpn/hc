@@ -5,6 +5,7 @@ type RunConfig struct {
 	Proxy             string
 	Out               string
 	Interval          int
+	Only              []string
 	StopOnFailure     bool
 	StopOnError       bool
 	ParallelExecution bool
