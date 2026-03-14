@@ -88,6 +88,19 @@ var runCmd = &cobra.Command{
 			fmt.Fprint(os.Stderr, "no requests found in HTTP file")
 			return nil
 		}
+		if len(runConfig.Only) > 0 {
+			_reqs := make([]hc.HttpRequest, 0, len(runConfig.Only))
+
+			for _, reqName := range runConfig.Only {
+				for _, req := range reqs {
+					if req.Name == reqName {
+						_reqs = append(_reqs, req)
+					}
+				}
+			}
+
+			reqs = _reqs
+		}
 
 		// 標準入力をRawモードに設定
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
@@ -130,6 +143,7 @@ func init() {
 	runCmd.Flags().StringVarP(&runConfig.Proxy, "proxy", "p", "", "Proxy URL")
 	runCmd.Flags().StringVarP(&runConfig.Out, "out", "o", "out", "Output directory for results")
 	runCmd.Flags().IntVarP(&runConfig.Interval, "interval", "i", 1000, "request interval, defaults to 1000 ms")
+	runCmd.Flags().StringSliceVarP(&runConfig.Only, "only", "", []string{}, "Execute only specified requests in the order they are given")
 	runCmd.Flags().BoolVar(&runConfig.StopOnFailure, "stop-on-failure", false, "Stop execution on assertion failure")
 	runCmd.Flags().BoolVar(&runConfig.StopOnError, "stop-on-error", false, "Stop execution on any error")
 	runCmd.Flags().BoolVar(&runConfig.ParallelExecution, "parallel", false, "Enable parallel execution of requests")
