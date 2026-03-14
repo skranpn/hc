@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.5](https://github.com/skranpn/hc/compare/v0.0.4...v0.0.5) - 2026-03-13
+- update README.md by @skranpn in https://github.com/skranpn/hc/pull/10
+- fix typo by @skranpn in https://github.com/skranpn/hc/pull/12
+- implement lint command by @skranpn in https://github.com/skranpn/hc/pull/9
+
 ## [v0.0.4](https://github.com/skranpn/hc/compare/v0.0.3...v0.0.4) - 2026-03-12
 - add skip metadata, @skip if <condition> by @skranpn in https://github.com/skranpn/hc/pull/7
 
