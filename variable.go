@@ -19,7 +19,7 @@ var (
 	symbol           = `[\w\.-_\$\[\]@\*:,\(\)\^\~\<\>=]+`
 	jsonpathVarRegex = regexp.MustCompile(`\{\{([a-zA-Z0-9]+\.response\.` + symbol + `)\}\}`)
 	// system variable
-	systemVarRegex = regexp.MustCompile(`\{\{\$(\w+)\}\}`)
+	systemVarRegex = regexp.MustCompile(`\{\{\$(\w+)\s*(.*)\}\}`)
 )
 
 type VariableManager struct {
@@ -42,12 +42,14 @@ func NewVariableManager(env map[string]string) *VariableManager {
 	}
 }
 
-func (vm *VariableManager) Set(key string, value string, jsonpaths map[string]any) {
+func (vm *VariableManager) Set(key string, value string) {
+	vm.variables[key] = vm.ReplaceVariables(value)
+}
+
+func (vm *VariableManager) SetJSONPaths(jsonpaths map[string]any) {
 	for k, v := range jsonpaths {
 		vm.jsonpathVariables[k] = fmt.Sprintf("%v", v)
 	}
-
-	vm.variables[key] = vm.ReplaceVariables(value)
 }
 
 func (vm *VariableManager) Get(key string) string {
@@ -85,7 +87,8 @@ func (vm *VariableManager) ReplaceVariables(input string) string {
 		submatches := systemVarRegex.FindStringSubmatch(query)
 		if len(submatches) > 1 {
 			key := submatches[1]
-			return systemVariables(key)
+			rest := submatches[2]
+			return systemVariables(key, rest)
 		}
 		return query
 	})
@@ -129,25 +132,34 @@ var offsetOptionValue = map[string]int64{
 	"y": offset_y,
 }
 
-func systemVariables(input string) string {
-	parts := strings.Fields(input)
+func systemVariables(name string, arg string) string {
+	args := strings.Fields(arg)
 
-	switch parts[0] {
+	switch strings.TrimSpace(name) {
 	case "guid":
 		return uuid.NewString()
 
 	case "randomInt":
-		if len(parts) < 3 {
-			return input
+		if len(args) == 0 {
+			return fmt.Sprint(rand.Int())
 		}
 
-		p1, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return input
+		if len(args) == 1 {
+			p1, err := strconv.Atoi(args[0])
+			if err != nil {
+				return name
+			}
+
+			return fmt.Sprint(rand.IntN(max(0, p1)))
 		}
-		p2, err := strconv.Atoi(parts[2])
+
+		p1, err := strconv.Atoi(args[0])
 		if err != nil {
-			return input
+			return name
+		}
+		p2, err := strconv.Atoi(args[1])
+		if err != nil {
+			return name
 		}
 
 		return fmt.Sprint(rand.IntN(max(p1, p2)-min(p1, p2)+1) + min(p1, p2))
@@ -155,16 +167,16 @@ func systemVariables(input string) string {
 	case "timestamp":
 		now := fmt.Sprint(time.Now().Unix())
 
-		if len(parts) != 3 {
+		if len(args) != 2 {
 			return now
 		}
 
-		offset, err := strconv.Atoi(parts[1])
+		offset, err := strconv.Atoi(args[0])
 		if err != nil {
 			return now
 		}
 
-		option := parts[2]
+		option := args[1]
 		if !slices.Contains(slices.Collect(maps.Keys(offsetOptionValue)), option) {
 			return now
 		}
@@ -172,5 +184,5 @@ func systemVariables(input string) string {
 		return fmt.Sprint(time.Now().Unix() + int64(offset)*offsetOptionValue[option])
 	}
 
-	return input
+	return name
 }
