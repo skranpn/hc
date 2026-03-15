@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.0](https://github.com/skranpn/hc/compare/v0.1.0...v0.2.0) - 2026-03-15
+- add expr system variable by @skranpn in https://github.com/skranpn/hc/pull/17
+- Fix jsonpath invalid index access by @skranpn in https://github.com/skranpn/hc/pull/18
+
 ## [v0.1.0](https://github.com/skranpn/hc/compare/v0.0.5...v0.1.0) - 2026-03-14
 - fix system variable parse logic by @skranpn in https://github.com/skranpn/hc/pull/13
 - add --only option by @skranpn in https://github.com/skranpn/hc/pull/15
