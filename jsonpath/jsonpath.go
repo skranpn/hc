@@ -85,7 +85,8 @@ var nameRegex = regexp.MustCompile(`[a-zA-Z0-9]+$`)
 
 func isJSONPath(path string) bool {
 	parts := strings.Split(path, ".")
-	if len(parts) < 2 {
+	// at least 3 parts exists, name, response, (status|body|header)
+	if len(parts) < 3 {
 		return false
 	}
 
