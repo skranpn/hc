@@ -69,8 +69,14 @@ func TestVariableManager_ReplaceSystemVariables(t *testing.T) {
 		{"{{$randomInt 7}}", `^[0-9]{1}$`},
 		{"{{$randomInt 0 10}}", `^[0-9]{1,2}$`},
 		{"{{$randomInt -10 -5}}", `^-[0-9]{1,2}$`},
+		{"{{$randomInt 0 {{$randomInt 1 10}}}}", `^[0-9]{1,2}$`},
 		{"{{$timestamp}}", `^[0-9]{10}$`},
 		{"{{$timestamp 1 m}}", `^[0-9]{10}$`},
+		{"{{$expr 1+1}}", `2`},
+		{"{{$expr 2*(1+1)}}", `4`},
+		{"{{$expr 1 + {{$expr 1 + 1}}}}", `3`},
+		{"{{$expr 1>0}}", `true`},
+		{"{{$expr 1 + {{$randomInt 0 1}}}}", `^[0-9]{1}$`},
 	}
 
 	for _, test := range tests {

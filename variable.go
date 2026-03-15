@@ -1,7 +1,12 @@
 package hc
 
 import (
+	"errors"
 	"fmt"
+	"go/ast"
+	"go/constant"
+	goparser "go/parser"
+	"go/token"
 	"maps"
 	"math/rand/v2"
 	"regexp"
@@ -88,6 +93,9 @@ func (vm *VariableManager) ReplaceVariables(input string) string {
 		if len(submatches) > 1 {
 			key := submatches[1]
 			rest := submatches[2]
+			if rest != "" {
+				rest = vm.ReplaceVariables(rest)
+			}
 			return systemVariables(key, rest)
 		}
 		return query
@@ -182,7 +190,71 @@ func systemVariables(name string, arg string) string {
 		}
 
 		return fmt.Sprint(time.Now().Unix() + int64(offset)*offsetOptionValue[option])
+
+	case "expr":
+		if len(args) == 0 {
+			return ""
+		}
+
+		v, err := eval(arg)
+		if err != nil {
+			return ""
+		}
+
+		return v
 	}
 
 	return name
+}
+
+func eval(e string) (string, error) {
+	expr, err := goparser.ParseExpr(e)
+	if err != nil {
+		return "", err
+	}
+
+	v, err := evalExpr(expr)
+	if err != nil {
+		return "", err
+	}
+
+	return v.String(), nil
+}
+
+func evalExpr(expr ast.Expr) (v constant.Value, rerr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			v, rerr = constant.MakeUnknown(), fmt.Errorf("%v", r)
+		}
+	}()
+
+	switch e := expr.(type) {
+	case *ast.ParenExpr:
+		return evalExpr(e.X)
+	case *ast.BinaryExpr:
+		return evalBinaryExpr(e)
+	case *ast.BasicLit:
+		return constant.MakeFromLiteral(e.Value, e.Kind, 0), nil
+	}
+
+	return constant.MakeUnknown(), errors.New("unkown node")
+}
+
+func evalBinaryExpr(expr *ast.BinaryExpr) (constant.Value, error) {
+	x, err := evalExpr(expr.X)
+	if err != nil {
+		return constant.MakeUnknown(), err
+	}
+
+	y, err := evalExpr(expr.Y)
+	if err != nil {
+		return constant.MakeUnknown(), err
+	}
+
+	switch expr.Op {
+	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+		return constant.MakeBool(constant.Compare(x, expr.Op, y)), nil
+	}
+
+	return constant.BinaryOp(x, expr.Op, y), nil
 }
