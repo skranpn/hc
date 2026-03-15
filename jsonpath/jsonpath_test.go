@@ -11,6 +11,7 @@ func TestSerialize(t *testing.T) {
 		{"status code", `GetStatusCode.response.status`, "$.response.status"},
 		{"header", `GetStatusCode.response.headers.Content-Type`, "$.response.headers['Content-Type']"},
 		{"name missing", `response.status`, "response.status"},
+		{"name missing", `response.headers.Accept`, "response.headers.Accept"},
 	}
 
 	for _, tt := range testdata {
