@@ -7,8 +7,7 @@ import (
 )
 
 var (
-	symbol           = `[\w\.-_\$\[\]@\*:,\(\)\^\~\<\>=]+`
-	jsonpathVarRegex = regexp.MustCompile(`\{\{([a-zA-Z0-9]+\.response\.` + symbol + `)\}\}`)
+	jsonpathVarRegex = regexp.MustCompile(`\{\{([a-zA-Z0-9]+\.response\.(?:status|body|headers)(\.?[\w\W]*))\}\}`)
 )
 
 type Variable struct {

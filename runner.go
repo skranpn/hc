@@ -270,16 +270,27 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 				}
 			},
 			Variable: func(v *metadata.Variable) error {
-				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value))
 
+				// jsonpath 内にネストした変数展開があるかもなので、事前に Replace する
+				v.Value = r.vm.ReplaceVariables(v.Value)
+				jsonpaths := v.JSONPaths()
+				for i, jp := range v.JSONPaths() {
+					jsonpaths[i] = r.vm.ReplaceVariables(jp)
+				}
+
+				// レスポンスと jsonpath を見て値を取得
 				var values map[string]any
-				values, err = jsonpath.All(unifiedJSON, v.JSONPaths())
+				values, err = jsonpath.All(unifiedJSON, jsonpaths)
 				if err != nil && (r.stopOnFailure || r.stopOnError) {
 					return err
 				}
 				r.reporter.Stderr(err)
 
+				// jsonpath 変数に保存
 				r.vm.SetJSONPaths(values)
+
+				// 変数に保存
+				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value))
 
 				return nil
 			},

@@ -191,9 +191,9 @@ Reference a value from an assigned variable defined as `@variableName = variable
 Reference a value from a previous response using its request name and JSONPath:
 
 ```
-{{RquestName.body.response.status}}
-{{RquestName.body.response.body.field}}
-{{RquestName.body.response.headers.Content-Type}}
+{{RequestName.body.response.status}}
+{{RequestName.body.response.body.field}}
+{{RequestName.body.response.headers.Content-Type}}
 ```
 
 #### System variables
@@ -213,6 +213,25 @@ Paths used in `@assert`, `@until`, `@skip`, and variable assignment follow this 
 <RequestName>.response.status
 <RequestName>.response.body.<field>
 <RequestName>.response.headers.<header-name>
+```
+
+The `response.body` portion is evaluated as a [RFC 9535 JSONPath](https://www.rfc-editor.org/rfc/rfc9535.html) expression against the parsed JSON body.
+Array indexing and nested field access follow standard JSONPath syntax:
+
+```
+{{GetItems.response.body.items[0].id}}
+```
+
+RFC 9535 filter expressions are also supported, including logical functions such as `match` and `search`:
+
+```
+{{GetItems.response.body[?search(@.name, "todo")].id}}
+```
+
+Header names contains hyphens are supported and automatically converted to bracket notation internally:
+
+```
+{{GetItems.response.headers.X-Forwarded-For}}
 ```
 
 ## CLI Options
