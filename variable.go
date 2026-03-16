@@ -21,8 +21,7 @@ import (
 var (
 	varRegex = regexp.MustCompile(`\{\{(\w+)\}\}`)
 	// custom variable (jsonpath)
-	symbol           = `[\w\.-_\$\[\]@\*:,\(\)\^\~\<\>=]+`
-	jsonpathVarRegex = regexp.MustCompile(`\{\{([a-zA-Z0-9]+\.response\.` + symbol + `)\}\}`)
+	jsonpathVarRegex = regexp.MustCompile(`\{\{([a-zA-Z0-9]+\.response\.(?:status|body|headers)(\.?[\w\W]*))\}\}`)
 	// system variable
 	systemVarRegex = regexp.MustCompile(`\{\{\$(\w+)\s*(.*)\}\}`)
 )
@@ -105,6 +104,9 @@ func (vm *VariableManager) ReplaceVariables(input string) string {
 		submatches := jsonpathVarRegex.FindStringSubmatch(query)
 		if len(submatches) > 1 {
 			key := submatches[1]
+			if submatches[2] != "" {
+				key = vm.ReplaceVariables(key)
+			}
 			if val, ok := vm.jsonpathVariables[key]; ok {
 				return val
 			}

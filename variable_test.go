@@ -31,7 +31,9 @@ func TestVariableManager_ReplaceVariables(t *testing.T) {
 	vm.Set("userId", "123")
 	vm.Set("token", "abc123")
 	vm.SetJSONPaths(map[string]any{
-		"test.response.status": 200,
+		"test.response.status":                  200,
+		"test.response.body.id":                 1,
+		"test.response.headers.X-Forwarded-For": "192.0.2.1",
 	})
 
 	tests := []struct {
@@ -46,7 +48,9 @@ func TestVariableManager_ReplaceVariables(t *testing.T) {
 		{"userId}}", "userId}}"},               // Incomplete template
 		// jsonpath
 		{"{{test.response.status}}", "200"},
-		{"{{test.response.body.id}}", "{{test.response.body.id}}"}, // Non-existent jsonpath variable
+		{"{{test.response.body.id}}", "1"},
+		{"{{test.response.body.unknown}}", "{{test.response.body.unknown}}"},
+		{"{{test.response.headers.X-Forwarded-For}}", "192.0.2.1"},
 	}
 
 	for _, test := range tests {
