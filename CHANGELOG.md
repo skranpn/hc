@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.2.0](https://github.com/skranpn/hc/compare/v0.1.0...v0.2.0) - 2026-03-16
+- add expr system variable by @skranpn in https://github.com/skranpn/hc/pull/17
+- Fix jsonpath invalid index access by @skranpn in https://github.com/skranpn/hc/pull/18
+- add handleMetadata test for variable by @skranpn in https://github.com/skranpn/hc/pull/21
+- Bump golang.org/x/term from 0.40.0 to 0.41.0 by @dependabot[bot] in https://github.com/skranpn/hc/pull/20
+
 ## [v0.1.0](https://github.com/skranpn/hc/compare/v0.0.5...v0.1.0) - 2026-03-14
 - fix system variable parse logic by @skranpn in https://github.com/skranpn/hc/pull/13
 - add --only option by @skranpn in https://github.com/skranpn/hc/pull/15
