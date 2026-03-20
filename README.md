@@ -198,12 +198,13 @@ Reference a value from a previous response using its request name and JSONPath:
 
 #### System variables
 
-| Variable                     | Description                                      |
-| ---------------------------- | ------------------------------------------------ |
-| `{{$guid}}`                  | Random UUID v4                                   |
-| `{{$randomInt <min> <max>}}` | Random integer between min and max               |
-| `{{$timestamp}}`             | Current Unix timestamp (seconds)                 |
-| `{{$timestamp <n> <unit>}}`  | Unix timestamp with offset (s, m, h, d, w, M, y) |
+| Variable                     | Description                                                    |
+| ---------------------------- | -------------------------------------------------------------- |
+| `{{$guid}}`                  | Random UUID v4                                                 |
+| `{{$randomInt <min> <max>}}` | Random integer between min and max                             |
+| `{{$timestamp}}`             | Current Unix timestamp (seconds)                               |
+| `{{$timestamp <n> <unit>}}`  | Unix timestamp with offset (s, m, h, d, w, M, y)               |
+| `{{$expr <expr>}}`           | Simple arithmetic operations. Variable is available in \<expr> |
 
 ### JSONPath Reference
 
