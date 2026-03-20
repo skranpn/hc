@@ -238,8 +238,7 @@ func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *Htt
 				// 実行回数チェック
 				if v.CurrentAttempt >= v.MaxRetry {
 					if r.stopOnFailure {
-						// return fmt.Errorf("until assertion failed: %s", v.Raw)
-						return nil
+						return fmt.Errorf("until assertion failed: %s", v.Raw)
 					}
 
 					return ErrUntilExceedMaximumRetry

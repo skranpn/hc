@@ -29,8 +29,6 @@ func Parse(line string) (metadataValue, error) {
 	}
 }
 
-// type MetadataSlice []Metadata
-
 func (m Metadata) OK() bool {
 	match := false
 	ng := false

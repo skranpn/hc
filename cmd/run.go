@@ -148,6 +148,7 @@ var runCmd = &cobra.Command{
 
 		// すべて終わったら reportCh を閉じる
 		close(reportCh)
+		// reporter が終わったら ch が閉じられるのえそれを待つ
 		<-ch
 
 		reporter.Flush()

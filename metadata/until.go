@@ -63,6 +63,7 @@ func NewUntil(line string) (*Until, error) {
 	}
 
 	return &Until{
+		Raw:       line,
 		Condition: cond,
 		MaxRetry:  maxN,
 		Interval:  intervalN,
@@ -71,5 +72,8 @@ func NewUntil(line string) (*Until, error) {
 }
 
 func (u *Until) IsFinish() bool {
-	return u.Condition.Ok() || u.CurrentAttempt == 0 || u.CurrentAttempt >= u.MaxRetry
+	// condition ok: left == right になったので終わり
+	// attempt > max retry: 最大リトライ回数まで実行したので終わり
+	// attempt == 0: エラーで until の処理が行われなかったら attempt == 0 になる。終わり判定にする
+	return u.Condition.Ok() || u.CurrentAttempt >= u.MaxRetry || u.CurrentAttempt == 0
 }
