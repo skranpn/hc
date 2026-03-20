@@ -1,107 +1,154 @@
 package hc
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/skranpn/hc/metadata"
 )
 
+type Report struct {
+	Req *HttpRequest
+	Res *HttpResponse
+	Err error
+
+	// 変数出力のため
+	// nil じゃないときだけメソッドを呼ぶ
+	Variable map[string]string
+}
+
+type summary struct {
+	method     string
+	url        string
+	statusCode string
+	status     string
+	err        string
+}
+
+func (s summary) toMarkdownTable() string {
+	return fmt.Sprintf("| %s | %s | %s | %s |", s.method, s.url, s.statusCode, s.status)
+}
+
 type Reporter struct {
 	out string
 	now time.Time
+
+	summary []summary
 }
 
 func NewReporter(out string) *Reporter {
-	return &Reporter{
-		out: out,
-		now: time.Now(),
+	return &Reporter{out: out, now: time.Now()}
+}
+
+func (r *Reporter) Start(ctx context.Context, ch <-chan *Report) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case data, ok := <-ch:
+			if !ok {
+				return
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(5)
+			go func() { defer wg.Done(); r.stdout(data) }()
+			go func() { defer wg.Done(); r.stderr(data) }()
+			go func() { defer wg.Done(); r.result(data) }()
+			go func() { defer wg.Done(); r.variable(data) }()
+			go func() { defer wg.Done(); r.save(data) }()
+			wg.Wait()
+		}
 	}
 }
 
-// Stdout はリクエストの実行結果が標準出力に書かれます
-func (r Reporter) Stdout(req *HttpRequest, resp *HttpResponse, _metadata metadata.MetadataSlice) (err error) {
-	if !_metadata.Finish() {
+func (r *Reporter) stdout(result *Report) error {
+	// variable のみ、err のみ記録したいとき req が nil になりうる
+	// この場合は何もせず終了
+	if result.Req == nil {
+		return nil
+	}
+
+	// skipped のとき resp が nil になりうる
+	// req があれば記録はできるので継続
+
+	indicator := color.New(color.FgRed, color.Bold)
+	messages := make([]string, 0, len(result.Req.Metadata)+1)
+
+	name := result.Req.Name
+	if name == "" {
+		name = fmt.Sprintf("%s %s", result.Req.Method, result.Req.URL)
+	}
+	if result.Res == nil {
+		messages = append(messages, fmt.Sprintf("%s", name))
+	} else {
+		messages = append(messages, fmt.Sprintf("%d %s", result.Res.StatusCode, name))
+	}
+
+FOR:
+	for _, m := range result.Req.Metadata {
+		switch v := m.(type) {
+		case *metadata.Skip:
+			if v.Condition.Ok() {
+				// if skipped, set yellow
+				indicator = color.New(color.FgYellow, color.Bold)
+				messages = append(messages, fmt.Sprintf("  └ %s, skipped", v.Condition.Raw))
+				break
+			}
+
+		case *metadata.Until:
+			messages = append(messages, fmt.Sprintf("  └ [%d/%d] %s: %s", v.CurrentAttempt, v.MaxRetry, v.Condition.Raw, v.Condition.StatusText()))
+			if !v.IsFinish() {
+				// if until condition is not met, set white
+				indicator = color.New(color.FgWhite, color.Bold)
+
+				break FOR
+			}
+		case *metadata.Assertion:
+			messages = append(messages, fmt.Sprintf("  └ %s, %s", v.Raw, v.StatusText()))
+			if v.Ok() {
+				indicator = color.New(color.FgGreen, color.Bold)
+			} else {
+				indicator = color.New(color.FgRed, color.Bold)
+			}
+		}
+	}
+
+	if !result.Req.Metadata.Finish() {
 		fmt.Fprint(os.Stdout, "\033[s")
 		defer func() {
-			_, err = fmt.Fprint(os.Stdout, "\033[u")
+			fmt.Fprint(os.Stdout, "\033[u")
 		}()
 	}
 
-	if _metadata.Skipped() {
-		c := color.New(color.FgYellow, color.Bold)
-		c.Print("● ")
-	} else if _metadata.OK() {
-		c := color.New(color.FgGreen, color.Bold)
-		c.Print("● ")
-	} else {
-		c := color.New(color.FgRed, color.Bold)
-		c.Print("● ")
-	}
-
-	name := req.Name
-	if name == "" {
-		name = fmt.Sprintf("%s %s", req.Method, req.URL)
-	}
-	if resp == nil {
-		fmt.Fprintf(os.Stdout, "%s\r\n", name)
-	} else {
-		fmt.Fprintf(os.Stdout, "%d %s\r\n", resp.StatusCode, name)
-	}
-
-	for _, m := range _metadata {
-		m.Match(metadata.Cases{
-			Until: func(u *metadata.Until) error {
-				fmt.Fprintf(os.Stdout, "  └ [%d/%d] %s: %s\r\n", u.CurrentAttempt, u.MaxRetry, u.Condition.Raw, u.Condition.StatusText())
-				return nil
-			},
-			Assertion: func(a *metadata.Assertion) error {
-				fmt.Fprintf(os.Stdout, "  └ %s, %s\r\n", a.Raw, a.StatusText())
-				return nil
-			},
-			Skip: func(s *metadata.Skip) error {
-				fmt.Fprintf(os.Stdout, "  └ %s, skipped \r\n", s.Condition.Raw)
-				return nil
-			},
-			Variable: func(v *metadata.Variable) error { return nil },
-		})
-	}
+	indicator.Print("● ")
+	fmt.Fprint(os.Stdout, strings.Join(messages, "\r\n")+"\r\n")
 
 	return nil
 }
 
-// Stderr は実行中に起きたエラーが標準エラー出力に書かれます
-func (r Reporter) Stderr(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v\r\n", err)
+func (r *Reporter) stderr(result *Report) {
+	if result.Err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\r\n", result.Err)
 	}
 }
 
-// Current は HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
-// 直前に実行したリクエスト、レスポンスのみがファイルに書かれます
-func (r Reporter) Current(req *HttpRequest, resp *HttpResponse, arg_err error) error {
-	path, err := r.filepath("last", "txt")
-	if err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = f.Write([]byte(r.format(req, resp, arg_err)))
-	return err
-}
-
-// Result も HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
+// result も HTTP リクエスト、HTTP レスポンスをそのままファイルに出力します
 // これまで実行したリクエスト、レスポンスがファイルに記録されます
-func (r Reporter) Result(req *HttpRequest, resp *HttpResponse, err error) error {
+func (r *Reporter) result(result *Report) error {
+	// variable のみ、err のみ記録したいとき req が nil になりうる
+	// この場合は何もせず終了
+	if result.Req == nil {
+		return nil
+	}
+
 	path, err := r.filepath("result", "txt")
 	if err != nil {
 		return err
@@ -112,48 +159,15 @@ func (r Reporter) Result(req *HttpRequest, resp *HttpResponse, err error) error 
 	}
 	defer f.Close()
 
-	_, err = f.Write([]byte(r.format(req, resp, err)))
+	_, err = f.Write([]byte(r.format(result.Req, result.Res, result.Err)))
 	return err
 }
 
-// Summary は実行したリクエストの結果を markdown の表形式となるようにファイルに出力します
-func (r Reporter) Summary(req *HttpRequest, resp *HttpResponse, metadata metadata.MetadataSlice) error {
-	var f *os.File
-
-	path, err := r.filepath("summary", "md")
-	if err != nil {
-		return err
-	}
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		f, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		f.Write([]byte("| Method | URL | StatusCode | Assert |\n|--- |--- |--- |--- |\n"))
-	} else {
-		f, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
+func (r *Reporter) variable(result *Report) error {
+	if result.Variable == nil {
+		return nil
 	}
 
-	status := ""
-	if metadata != nil {
-		status = metadata.Status()
-	}
-	statusCode := "N/A"
-	if resp != nil {
-		statusCode = fmt.Sprint(resp.StatusCode)
-	}
-	_, err = f.Write(fmt.Appendf(nil, "| %s | %s | %s | %s |\n", req.Method, req.URL, statusCode, status))
-	return err
-}
-
-// Variable は実行時に使った変数をファイルに出力します
-func (r Reporter) Variable(variable map[string]string) error {
 	path, err := r.filepath("variable", "txt")
 	if err != nil {
 		return err
@@ -164,14 +178,81 @@ func (r Reporter) Variable(variable map[string]string) error {
 	}
 	defer f.Close()
 
-	for k, v := range variable {
+	for k, v := range result.Variable {
 		f.Write(fmt.Appendf(nil, "%s=%s\n", k, v))
 	}
 
 	return nil
 }
 
-func (r Reporter) filepath(name string, ext string) (string, error) {
+func (r *Reporter) Flush() error {
+	var f *os.File
+
+	path, err := r.filepath("summary", "md")
+	if err != nil {
+		return err
+	}
+	f, err = os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	toMarkdownTable := func() []string {
+		body := make([]string, 0, len(r.summary))
+		for _, s := range r.summary {
+			body = append(body, s.toMarkdownTable())
+		}
+
+		return body
+	}
+
+	body := toMarkdownTable()
+	f.Write([]byte(strings.Join(
+		append(
+			[]string{
+				"| Method | URL | StatusCode | Assert |",
+				"|--- |--- |--- |--- |",
+			},
+			body...,
+		),
+		"\n",
+	)))
+
+	return nil
+}
+
+func (r *Reporter) save(result *Report) {
+
+	if result.Req == nil {
+		return
+	}
+
+	status := "N/A"
+	if result.Req.Metadata != nil {
+		status = result.Req.Metadata.Status()
+	}
+
+	statusCode := "N/A"
+	if result.Res != nil {
+		statusCode = fmt.Sprint(result.Res.StatusCode)
+	}
+
+	err := ""
+	if result.Err != nil {
+		err = result.Err.Error()
+	}
+
+	r.summary = append(r.summary, summary{
+		method:     result.Req.Method,
+		url:        result.Req.URL,
+		statusCode: statusCode,
+		status:     status,
+		err:        err,
+	})
+}
+
+func (r *Reporter) filepath(name string, ext string) (string, error) {
 	dir := filepath.Join(r.out, fmt.Sprint(r.now.Unix()))
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return "", err
@@ -179,7 +260,7 @@ func (r Reporter) filepath(name string, ext string) (string, error) {
 	return filepath.Join(dir, fmt.Sprintf("%s.%s", name, ext)), nil
 }
 
-func (r Reporter) format(req *HttpRequest, resp *HttpResponse, err error) string {
+func (r *Reporter) format(req *HttpRequest, resp *HttpResponse, err error) string {
 	name := req.Name
 	if name == "" {
 		name = fmt.Sprintf("%s %s", req.Method, req.URL)

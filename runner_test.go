@@ -20,7 +20,7 @@ func TestHandleMetadataVariable(t *testing.T) {
 		nil,
 		HttpRequest{
 			Name:     "TEST",
-			Metadata: []metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?@.value==10].id}}")},
+			Metadata: metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?@.value==10].id}}")},
 		},
 		HttpResponse{Body: []byte(`{"keys":[{"id":1,"value":0},{"id":2,"value":10},{"id":3,"value":20}]}`)},
 		"{{id}}",
@@ -28,14 +28,14 @@ func TestHandleMetadataVariable(t *testing.T) {
 	}, {
 		"match",
 		nil,
-		HttpRequest{Name: "TEST", Metadata: []metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?match(@.value,'some.*')].id}}")}},
+		HttpRequest{Name: "TEST", Metadata: metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?match(@.value,'some.*')].id}}")}},
 		HttpResponse{Body: []byte(`{"keys":[{"id":1,"value":"something-long-text"},{"id":2,"value":"for-example-uuid-here"}]}`)},
 		"{{id}}",
 		"1",
 	}, {
 		"nested",
 		map[string]string{"env": "dev"},
-		HttpRequest{Name: "TEST", Metadata: []metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?match(@.value,'{{env}}.*')].id}}")}},
+		HttpRequest{Name: "TEST", Metadata: metadata.Metadata{GetMetadataVariable(t, "id = {{TEST.response.body.keys[?match(@.value,'{{env}}.*')].id}}")}},
 		HttpResponse{Body: []byte(`{"keys":[{"id":1,"value":"hello"},{"id":2,"value":"test-value"},{"id":3,"value":"dev-value"}]}`)},
 		"{{id}}",
 		"3",
@@ -44,8 +44,13 @@ func TestHandleMetadataVariable(t *testing.T) {
 	for _, tt := range testdata {
 		t.Run(tt.name, func(t *testing.T) {
 			vm := NewVariableManager(tt.env)
-			reporter := NewReporter("")
-			runner := NewRunner(nil, vm, reporter, nil)
+			ch := make(chan *Report)
+			go func() {
+				for {
+					<-ch
+				}
+			}()
+			runner := NewRunner(nil, vm, nil, ch)
 			err := runner.handleMetadata(context.TODO(), &tt.req, &tt.res)
 			if err != nil {
 				t.Fatalf("%s: failed to handleMetadata: %v", tt.name, err)

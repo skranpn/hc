@@ -55,11 +55,6 @@ func NewAssertion(line string) (*Assertion, error) {
 	}, nil
 }
 
-// Assertion is Metadata
-func (a *Assertion) Match(c Cases) error {
-	return c.Assertion(a)
-}
-
 func (a *Assertion) StatusText() string {
 	if a.ok {
 		return "ok"

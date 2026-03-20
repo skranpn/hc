@@ -4,18 +4,11 @@ import (
 	"strings"
 )
 
-type Metadata interface {
-	Match(Cases) error
-}
+type metadataValue interface{}
 
-type Cases struct {
-	Assertion func(*Assertion) error
-	Until     func(*Until) error
-	Variable  func(*Variable) error
-	Skip      func(*Skip) error
-}
+type Metadata []metadataValue
 
-func Parse(line string) (Metadata, error) {
+func Parse(line string) (metadataValue, error) {
 	switch {
 	case strings.HasPrefix(line, "assert "):
 		// Syntax: assert <jsonPath> <operator> <value>
@@ -36,23 +29,24 @@ func Parse(line string) (Metadata, error) {
 	}
 }
 
-type MetadataSlice []Metadata
-
-func (m MetadataSlice) OK() bool {
+func (m Metadata) OK() bool {
+	match := false
 	ng := false
 	for _, metadata := range m {
 		switch v := metadata.(type) {
 		case *Until:
+			match = true
 			ng = ng || !v.Condition.Ok()
 		case *Assertion:
+			match = true
 			ng = ng || !v.Ok()
 		}
 	}
 
-	return !ng
+	return match && !ng
 }
 
-func (m MetadataSlice) Skipped() bool {
+func (m Metadata) Skipped() bool {
 	for _, metadata := range m {
 		switch v := metadata.(type) {
 		case *Skip:
@@ -63,7 +57,7 @@ func (m MetadataSlice) Skipped() bool {
 	return false
 }
 
-func (m MetadataSlice) Finish() bool {
+func (m Metadata) Finish() bool {
 	finish := true
 	for _, metadata := range m {
 		switch v := metadata.(type) {
@@ -75,7 +69,7 @@ func (m MetadataSlice) Finish() bool {
 	return finish
 }
 
-func (m MetadataSlice) Status() string {
+func (m Metadata) Status() string {
 	for _, metadata := range m {
 		switch v := metadata.(type) {
 		case *Skip:

@@ -135,7 +135,7 @@ type HttpRequest struct {
 	URL      string
 	Headers  map[string]string
 	Body     string
-	Metadata []metadata.Metadata
+	Metadata metadata.Metadata
 }
 
 func (h *HttpRequest) IsValid() bool {

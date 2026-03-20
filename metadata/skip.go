@@ -24,7 +24,3 @@ func NewSkip(line string) (*Skip, error) {
 		Condition: cond,
 	}, nil
 }
-
-func (s *Skip) Match(c Cases) error {
-	return c.Skip(s)
-}

@@ -36,8 +36,9 @@ func SetInterval(t int) RunnerOption {
 type Runner struct {
 	client   HttpClient
 	vm       *VariableManager
-	reporter *Reporter
 	pauseCtl *PauseController
+
+	ch chan<- *Report
 
 	stopOnFailure bool
 	stopOnError   bool
@@ -45,12 +46,12 @@ type Runner struct {
 	interval      time.Duration
 }
 
-func NewRunner(client HttpClient, vm *VariableManager, reporter *Reporter, pauseCtl *PauseController, opts ...RunnerOption) *Runner {
+func NewRunner(client HttpClient, vm *VariableManager, pauseCtl *PauseController, ch chan<- *Report, opts ...RunnerOption) *Runner {
 	runner := &Runner{
 		client:   client,
 		vm:       vm,
-		reporter: reporter,
 		pauseCtl: pauseCtl,
+		ch:       ch,
 	}
 
 	for _, opt := range opts {
@@ -62,21 +63,18 @@ func NewRunner(client HttpClient, vm *VariableManager, reporter *Reporter, pause
 
 // RunWithContext executes a request with a given context
 func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err error) {
-	defer func() {
-		r.reporter.Stderr(err)
-	}()
-
 	//  Variable substitution
 	r.replaceVariables(req)
 
+	// skip のチェックは request interval の前にする
 	err = r.handlePreRequest(req)
 	if errors.Is(err, ErrSkip) {
-		r.reporter.Stdout(req, nil, req.Metadata)
-		r.reporter.Summary(req, nil, req.Metadata)
+		r.ch <- &Report{Req: req}
 		return nil
 	}
 
-	// skip したら sleep はなし
+	// request interval
+	// todo: batch 側に移したほうがよさそう
 	defer func() {
 		if r.interval > 0 {
 			sleep(ctx, r.interval)
@@ -84,25 +82,7 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 	}()
 
 	for {
-		resp, err := r.send(ctx, req)
-		defer func() {
-			r.reporter.Summary(req, resp, req.Metadata)
-		}()
-		if err != nil {
-			// context canceled なら終了
-			if errors.Is(err, contextCanceled) {
-				return err
-			}
-			// stopOnXXX でも停止
-			if r.stopOnFailure || r.stopOnError {
-				return err
-			}
-			// それ以外なら継続 (エラーを無視)
-			return fmt.Errorf("%w%v", ErrIgnorable, err)
-		}
-
-		// handleMetadata
-		err = r.handleMetadata(ctx, req, resp)
+		err := r.run(ctx, req)
 		// 成功したら終了
 		if err == nil {
 			return nil
@@ -112,8 +92,13 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 			return err
 		}
 		// until のエラーならループ
-		if _, ok := errors.AsType[*ErrUntilAssert](err); ok {
+		if until, ok := errors.AsType[*ErrUntilAssert](err); ok {
+			sleep(ctx, until.Interval)
 			continue
+		}
+		// 無視可能なエラーなら終了
+		if errors.Is(err, ErrIgnorable) {
+			return err
 		}
 		// それ以外のエラーで stopOnXXX なら終了
 		if r.stopOnFailure || r.stopOnError {
@@ -126,9 +111,41 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 	}
 }
 
+func (r *Runner) run(ctx context.Context, req *HttpRequest) (err error) {
+	var resp *HttpResponse
+
+	defer func() {
+		e := err
+		if _, ok := errors.AsType[*ErrUntilAssert](err); ok {
+			e = nil
+		}
+
+		if ctx.Err() == nil {
+			r.ch <- &Report{Req: req, Res: resp, Err: e}
+		}
+	}()
+
+	resp, err = r.send(ctx, req)
+	if err != nil {
+		// context canceled なら終了
+		if errors.Is(err, contextCanceled) {
+			return err
+		}
+		// stopOnXXX でも停止
+		if r.stopOnFailure || r.stopOnError {
+			return err
+		}
+		// それ以外なら継続 (エラーを無視)
+		return fmt.Errorf("%w%v", ErrIgnorable, err)
+	}
+
+	// handleMetadata
+	return r.handleMetadata(ctx, req, resp)
+}
+
 func (r *Runner) replaceVariables(req *HttpRequest) {
 	defer func() {
-		r.reporter.Variable(r.vm.variables)
+		r.ch <- &Report{Variable: r.vm.variables}
 	}()
 
 	req.URL = r.vm.ReplaceVariables(req.URL)
@@ -138,24 +155,17 @@ func (r *Runner) replaceVariables(req *HttpRequest) {
 	req.Body = r.vm.ReplaceVariables(req.Body)
 
 	for _, m := range req.Metadata {
-		m.Match(metadata.Cases{
-			Assertion: func(a *metadata.Assertion) error {
-				a.LeftPath = r.vm.ReplaceVariables(a.LeftPath)
-				a.RightValue = r.vm.ReplaceVariables(a.RightValue)
-				return nil
-			},
-			Until: func(u *metadata.Until) error {
-				u.Condition.LeftPath = r.vm.ReplaceVariables(u.Condition.LeftPath)
-				u.Condition.RightValue = r.vm.ReplaceVariables(u.Condition.RightValue)
-				return nil
-			},
-			Skip: func(s *metadata.Skip) error {
-				s.Condition.LeftPath = r.vm.ReplaceVariables(s.Condition.LeftPath)
-				s.Condition.RightValue = r.vm.ReplaceVariables(s.Condition.RightValue)
-				return nil
-			},
-			Variable: func(v *metadata.Variable) error { return nil },
-		})
+		switch v := m.(type) {
+		case *metadata.Assertion:
+			v.LeftPath = r.vm.ReplaceVariables(v.LeftPath)
+			v.RightValue = r.vm.ReplaceVariables(v.RightValue)
+		case *metadata.Until:
+			v.Condition.LeftPath = r.vm.ReplaceVariables(v.Condition.LeftPath)
+			v.Condition.RightValue = r.vm.ReplaceVariables(v.Condition.RightValue)
+		case *metadata.Skip:
+			v.Condition.LeftPath = r.vm.ReplaceVariables(v.Condition.LeftPath)
+			v.Condition.RightValue = r.vm.ReplaceVariables(v.Condition.RightValue)
+		}
 	}
 }
 
@@ -177,32 +187,16 @@ func (r *Runner) send(ctx context.Context, req *HttpRequest) (*HttpResponse, err
 	}
 
 	// Send request
-	resp, err := r.client.Send(reqCtx, req)
-	r.reporter.Result(req, resp, err)
-	r.reporter.Current(req, resp, err)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, err
+	return r.client.Send(reqCtx, req)
 }
 
 func (r *Runner) handlePreRequest(req *HttpRequest) (err error) {
 	for _, m := range req.Metadata {
-		err := m.Match(metadata.Cases{
-			Skip: func(s *metadata.Skip) error {
-				if ok, _ := s.Condition.Evaluate(""); ok {
-					return ErrSkip
-				}
-				return nil
-			},
-			Assertion: func(a *metadata.Assertion) error { return nil },
-			Until:     func(u *metadata.Until) error { return nil },
-			Variable:  func(v *metadata.Variable) error { return nil },
-		})
-
-		if err != nil {
-			return err
+		switch s := m.(type) {
+		case *metadata.Skip:
+			if ok, _ := s.Condition.Evaluate(""); ok {
+				return ErrSkip
+			}
 		}
 	}
 
@@ -210,94 +204,73 @@ func (r *Runner) handlePreRequest(req *HttpRequest) (err error) {
 }
 
 func (r *Runner) handleMetadata(ctx context.Context, req *HttpRequest, resp *HttpResponse) (err error) {
-	// すべてのリクエストの Metadata を処理し終わってから &&
-	// until interval (sleep) よりも先に Stdout 出力をしたいので defer の順番はこう
-	defer func() {
-		if until, ok := errors.AsType[*ErrUntilAssert](err); ok {
-			sleep(ctx, until.Interval)
-		}
-	}()
-	defer func() {
-		err = errors.Join(err,
-			// r.reporter.Summary(req, resp, req.Metadata),
-			r.reporter.Stdout(req, resp, req.Metadata),
-		)
-	}()
-
 	unifiedJSON := resp.buildUnifiedJSON()
 
 	for _, m := range req.Metadata {
 
-		err = m.Match(metadata.Cases{
-			Assertion: func(a *metadata.Assertion) error {
-				ok, err := a.Evaluate(unifiedJSON)
-				if err != nil && (r.stopOnFailure || r.stopOnError) {
-					return err
-				}
-				r.reporter.Stderr(err)
+		switch v := m.(type) {
+		case *metadata.Assertion:
+			ok, err := v.Evaluate(unifiedJSON)
+			if err != nil && (r.stopOnFailure || r.stopOnError) {
+				return err
+			}
+			r.ch <- &Report{Err: err}
 
-				if !ok && r.stopOnFailure {
-					return fmt.Errorf("assertion failed: %s", a.Raw)
-				}
+			if !ok && r.stopOnFailure {
+				return fmt.Errorf("assertion failed: %s", v.Raw)
+			}
 
+		case *metadata.Until:
+			v.CurrentAttempt++
+
+			ok, err := v.Condition.Evaluate(unifiedJSON)
+			if err != nil && (r.stopOnFailure || r.stopOnError) {
+				return err
+			}
+			r.ch <- &Report{Err: err}
+
+			// 成功したら抜ける
+			if ok {
 				return nil
-			},
-			Until: func(u *metadata.Until) error {
-				u.CurrentAttempt++
+			}
 
-				ok, err := u.Condition.Evaluate(unifiedJSON)
-				if err != nil && (r.stopOnFailure || r.stopOnError) {
-					return err
-				}
-				r.reporter.Stderr(err)
-
-				// 成功したら抜ける
-				if ok {
-					return nil
-				}
-
+			if !ok {
 				// 実行回数チェック
-				if u.CurrentAttempt >= u.MaxRetry {
+				if v.CurrentAttempt >= v.MaxRetry {
 					if r.stopOnFailure {
-						return fmt.Errorf("until assertion failed: %s", u.Raw)
+						return fmt.Errorf("until assertion failed: %s", v.Raw)
 					}
 
 					return ErrUntilExceedMaximumRetry
 				}
 
 				return &ErrUntilAssert{
-					Interval: u.Interval,
+					Interval: v.Interval,
 				}
-			},
-			Variable: func(v *metadata.Variable) error {
+			}
 
-				// jsonpath 内にネストした変数展開があるかもなので、事前に Replace する
-				v.Value = r.vm.ReplaceVariables(v.Value)
-				jsonpaths := v.JSONPaths()
-				for i, jp := range v.JSONPaths() {
-					jsonpaths[i] = r.vm.ReplaceVariables(jp)
-				}
+		case *metadata.Variable:
 
-				// レスポンスと jsonpath を見て値を取得
-				var values map[string]any
-				values, err = jsonpath.All(unifiedJSON, jsonpaths)
-				if err != nil && (r.stopOnFailure || r.stopOnError) {
-					return err
-				}
-				r.reporter.Stderr(err)
+			// jsonpath 内にネストした変数展開があるかもなので、事前に Replace する
+			v.Value = r.vm.ReplaceVariables(v.Value)
+			jsonpaths := v.JSONPaths()
+			for i, jp := range v.JSONPaths() {
+				jsonpaths[i] = r.vm.ReplaceVariables(jp)
+			}
 
-				// jsonpath 変数に保存
-				r.vm.SetJSONPaths(values)
+			// レスポンスと jsonpath を見て値を取得
+			var values map[string]any
+			values, err = jsonpath.All(unifiedJSON, jsonpaths)
+			if err != nil && (r.stopOnFailure || r.stopOnError) {
+				return err
+			}
+			r.ch <- &Report{Err: err}
 
-				// 変数に保存
-				r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value))
+			// jsonpath 変数に保存
+			r.vm.SetJSONPaths(values)
 
-				return nil
-			},
-		})
-
-		if err != nil {
-			return err
+			// 変数に保存
+			r.vm.Set(v.Name, fmt.Sprintf("%v", v.Value))
 		}
 	}
 
