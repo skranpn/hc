@@ -231,7 +231,7 @@ type BatchOption struct {
 	Interval    string
 }
 
-func (bo BatchOption) ParseDuration() time.Duration {
+func (bo BatchOption) requestInterval() time.Duration {
 	d, err := time.ParseDuration(bo.Interval)
 	if err != nil {
 		return time.Second
@@ -251,7 +251,7 @@ func NewBatch(runner *Runner, opts BatchOption) *batch {
 		executor = NewParallelBatch(opts.Concurrenty)
 	} else {
 		executor = &SequentialBatch{
-			interval: opts.ParseDuration(),
+			interval: opts.requestInterval(),
 		}
 	}
 

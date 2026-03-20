@@ -28,12 +28,6 @@ func SetRequestTimeout(t int) RunnerOption {
 	}
 }
 
-// func SetInterval(t int) RunnerOption {
-// 	return func(r *Runner) {
-// 		r.interval = time.Duration(t) * time.Millisecond
-// 	}
-// }
-
 type Runner struct {
 	client   HttpClient
 	vm       *VariableManager
