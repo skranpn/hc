@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.2.1](https://github.com/skranpn/hc/compare/v0.2.0...v0.2.1) - 2026-03-20
+- use channel between runner and reporter by @skranpn in https://github.com/skranpn/hc/pull/22
+- add expr description in README.md by @skranpn in https://github.com/skranpn/hc/pull/24
+- update request interval by @skranpn in https://github.com/skranpn/hc/pull/25
+
 ## [v0.2.0](https://github.com/skranpn/hc/compare/v0.1.0...v0.2.0) - 2026-03-16
 - add expr system variable by @skranpn in https://github.com/skranpn/hc/pull/17
 - Fix jsonpath invalid index access by @skranpn in https://github.com/skranpn/hc/pull/18
