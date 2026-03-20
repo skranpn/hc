@@ -38,7 +38,6 @@ type Runner struct {
 	stopOnFailure bool
 	stopOnError   bool
 	timeout       time.Duration
-	// interval      time.Duration
 }
 
 func NewRunner(client HttpClient, vm *VariableManager, pauseCtl *PauseController, ch chan<- *Report, opts ...RunnerOption) *Runner {
