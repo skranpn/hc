@@ -71,9 +71,5 @@ func NewUntil(line string) (*Until, error) {
 }
 
 func (u *Until) IsFinish() bool {
-	return u.Condition.Ok() || u.CurrentAttempt >= u.MaxRetry
-}
-
-func (u *Until) Match(c Cases) error {
-	return c.Until(u)
+	return u.Condition.Ok() || u.CurrentAttempt == 0 || u.CurrentAttempt >= u.MaxRetry
 }

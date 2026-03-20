@@ -37,10 +37,6 @@ func NewVariable(expr string) (*Variable, error) {
 	return v, nil
 }
 
-func (a *Variable) Match(c Cases) error {
-	return c.Variable(a)
-}
-
 func (v *Variable) JSONPaths() []string {
 	return v.jsonpaths
 }

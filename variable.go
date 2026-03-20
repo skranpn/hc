@@ -115,11 +115,6 @@ func (vm *VariableManager) ReplaceVariables(input string) string {
 	})
 }
 
-// system variable
-// {{$guid}}
-// {{$randomInt min max}}
-// {{$timestamp [offset option]}}
-
 const (
 	// offset_ms = 1
 	offset_s = 1

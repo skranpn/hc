@@ -155,7 +155,8 @@ func (sbe *SequentialBatch) Execute(ctx context.Context, requests []HttpRequest,
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := runner.RunWithContext(ctx, &req); err != nil {
+		err := runner.RunWithContext(ctx, &req)
+		if err != nil && !errors.Is(err, ErrIgnorable) {
 			return err
 		}
 	}

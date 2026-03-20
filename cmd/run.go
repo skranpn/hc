@@ -35,47 +35,13 @@ var runCmd = &cobra.Command{
 			defer cancel()
 		}
 
+		// Open HTTP file
 		httpFile, err := os.Open(args[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "httpfile not found: %v\n", err)
 			return err
 		}
 		defer httpFile.Close()
-
-		env, err := hc.LoadEnvFile(runConfig.Env)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to load env file: %v\n", err)
-			return err
-		}
-
-		// Setup variable manager
-		vm := hc.NewVariableManager(env)
-
-		repoter := hc.NewReporter(runConfig.Out)
-
-		// Setup client
-		httpClient := http.DefaultClient
-		if runConfig.Proxy != "" {
-			url, err := url.ParseRequestURI(runConfig.Proxy)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "proxy url is invalid, %v\n", err)
-				return err
-			}
-			httpClient = &http.Client{
-				Transport: &http.Transport{
-					Proxy: http.ProxyURL(url),
-				},
-			}
-		}
-
-		client := hc.NewHttpClient(httpClient)
-		pauseCtl := hc.NewPauseController()
-		runner := hc.NewRunner(client, vm, repoter, pauseCtl,
-			hc.SetStopOnFailure(runConfig.StopOnFailure),
-			hc.SetStopOnError(runConfig.StopOnError),
-			hc.SetRequestTimeout(runConfig.RequestTimeout),
-			hc.SetInterval(runConfig.Interval),
-		)
 
 		// Parse HTTP file
 		parser := hc.NewParser()
@@ -102,6 +68,52 @@ var runCmd = &cobra.Command{
 			reqs = _reqs
 		}
 
+		// Setup client
+		httpClient := http.DefaultClient
+		if runConfig.Proxy != "" {
+			url, err := url.ParseRequestURI(runConfig.Proxy)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "proxy url is invalid, %v\n", err)
+				return err
+			}
+			httpClient = &http.Client{
+				Transport: &http.Transport{
+					Proxy: http.ProxyURL(url),
+				},
+			}
+		}
+
+		// Setup variable manager
+		env, err := hc.LoadEnvFile(runConfig.Env)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to load env file: %v\n", err)
+			return err
+		}
+		vm := hc.NewVariableManager(env)
+
+		// setup channel
+		reportCh := make(chan *hc.Report)
+		ch := make(chan struct{})
+
+		// setup reporter
+		reporter := hc.NewReporter(runConfig.Out)
+
+		// when program finished, reportCh will be closed
+		// then ch also closed to notice all reporting is finished
+		go func() {
+			defer close(ch)
+			reporter.Start(ctx, reportCh)
+		}()
+
+		client := hc.NewHttpClient(httpClient)
+		pauseCtl := hc.NewPauseController()
+		runner := hc.NewRunner(client, vm, pauseCtl, reportCh,
+			hc.SetStopOnFailure(runConfig.StopOnFailure),
+			hc.SetStopOnError(runConfig.StopOnError),
+			hc.SetRequestTimeout(runConfig.RequestTimeout),
+			hc.SetInterval(runConfig.Interval),
+		)
+
 		// 標準入力をRawモードに設定
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
@@ -123,6 +135,7 @@ var runCmd = &cobra.Command{
 					pauseCtl.Toggle()
 				case 0x03: // Ctrl+C
 					cancel()
+					close(reportCh)
 				}
 			}
 		}()
@@ -132,6 +145,12 @@ var runCmd = &cobra.Command{
 		if err := batchRunner.Run(ctx, reqs); err != nil {
 			return err
 		}
+
+		// すべて終わったら reportCh を閉じる
+		close(reportCh)
+		<-ch
+
+		reporter.Flush()
 
 		return nil
 	},

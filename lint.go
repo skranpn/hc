@@ -49,15 +49,10 @@ func Lint(requests []HttpRequest, envVars map[string]string) []LintIssue {
 		}
 
 		for _, m := range req.Metadata {
-			m.Match(metadata.Cases{
-				Variable: func(v *metadata.Variable) error {
-					definedVars[v.Name] = true
-					return nil
-				},
-				Assertion: func(a *metadata.Assertion) error { return nil },
-				Until:     func(u *metadata.Until) error { return nil },
-				Skip:      func(s *metadata.Skip) error { return nil },
-			})
+			switch v := m.(type) {
+			case *metadata.Variable:
+				definedVars[v.Name] = true
+			}
 		}
 	}
 
@@ -117,36 +112,28 @@ func Lint(requests []HttpRequest, envVars map[string]string) []LintIssue {
 		checkStr(req.Body)
 
 		for _, m := range req.Metadata {
-			m.Match(metadata.Cases{
-				Assertion: func(a *metadata.Assertion) error {
-					checkStr(a.LeftPath)
-					checkStr(a.RightValue)
-					checkBareRef(a.LeftPath)
-					checkBareRef(a.RightValue)
-					return nil
-				},
-				Until: func(u *metadata.Until) error {
-					checkStr(u.Condition.LeftPath)
-					checkStr(u.Condition.RightValue)
-					checkBareRef(u.Condition.LeftPath)
-					checkBareRef(u.Condition.RightValue)
-					return nil
-				},
-				Skip: func(s *metadata.Skip) error {
-					checkStr(s.Condition.LeftPath)
-					checkStr(s.Condition.RightValue)
-					checkBareRef(s.Condition.LeftPath)
-					checkBareRef(s.Condition.RightValue)
-					return nil
-				},
-				Variable: func(v *metadata.Variable) error {
-					for _, jp := range v.JSONPaths() {
-						refName := strings.SplitN(jp, ".", 2)[0]
-						checkRequestRef(refName)
-					}
-					return nil
-				},
-			})
+			switch v := m.(type) {
+			case *metadata.Assertion:
+				checkStr(v.LeftPath)
+				checkStr(v.RightValue)
+				checkBareRef(v.LeftPath)
+				checkBareRef(v.RightValue)
+			case *metadata.Until:
+				checkStr(v.Condition.LeftPath)
+				checkStr(v.Condition.RightValue)
+				checkBareRef(v.Condition.LeftPath)
+				checkBareRef(v.Condition.RightValue)
+			case *metadata.Skip:
+				checkStr(v.Condition.LeftPath)
+				checkStr(v.Condition.RightValue)
+				checkBareRef(v.Condition.LeftPath)
+				checkBareRef(v.Condition.RightValue)
+			case *metadata.Variable:
+				for _, jp := range v.JSONPaths() {
+					refName := strings.SplitN(jp, ".", 2)[0]
+					checkRequestRef(refName)
+				}
+			}
 		}
 	}
 
