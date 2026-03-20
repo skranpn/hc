@@ -4,7 +4,7 @@ type RunConfig struct {
 	Env               string
 	Proxy             string
 	Out               string
-	Interval          int
+	Interval          string
 	Only              []string
 	StopOnFailure     bool
 	StopOnError       bool

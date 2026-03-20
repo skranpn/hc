@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"regexp"
+	"time"
 
 	"github.com/skranpn/hc/metadata"
 	"golang.org/x/sync/errgroup"
@@ -147,17 +148,24 @@ type Batch interface {
 }
 
 // SequentialBatch executes requests sequentially
-type SequentialBatch struct{}
+type SequentialBatch struct {
+	interval time.Duration
+}
 
 // Execute runs requests sequentially
 func (sbe *SequentialBatch) Execute(ctx context.Context, requests []HttpRequest, runner *Runner) error {
-	for _, req := range requests {
+	for i, req := range requests {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		err := runner.RunWithContext(ctx, &req)
 		if err != nil && !errors.Is(err, ErrIgnorable) {
 			return err
+		}
+
+		// request interval
+		if len(requests)-1 != i {
+			sleep(ctx, sbe.interval)
 		}
 	}
 	return nil
@@ -213,26 +221,43 @@ func (pbe *ParallelBatch) Execute(ctx context.Context, requests []HttpRequest, r
 
 // batch is a convenience wrapper for batch execution
 type batch struct {
-	runner         *Runner
-	executor       Batch
-	parallelMode   bool
-	maxConcurrency int
+	runner   *Runner
+	executor Batch
+}
+
+type BatchOption struct {
+	Parallel    bool
+	Concurrenty int
+	Interval    string
+}
+
+func (bo BatchOption) ParseDuration() time.Duration {
+	d, err := time.ParseDuration(bo.Interval)
+	if err != nil {
+		return time.Second
+	}
+
+	if d < 0 {
+		return time.Second
+	}
+
+	return d
 }
 
 // NewBatch creates a new BatchRunner
-func NewBatch(runner *Runner, parallelMode bool, maxConcurrency int) *batch {
+func NewBatch(runner *Runner, opts BatchOption) *batch {
 	var executor Batch
-	if parallelMode {
-		executor = NewParallelBatch(maxConcurrency)
+	if opts.Parallel {
+		executor = NewParallelBatch(opts.Concurrenty)
 	} else {
-		executor = &SequentialBatch{}
+		executor = &SequentialBatch{
+			interval: opts.ParseDuration(),
+		}
 	}
 
 	return &batch{
-		runner:         runner,
-		executor:       executor,
-		parallelMode:   parallelMode,
-		maxConcurrency: maxConcurrency,
+		runner:   runner,
+		executor: executor,
 	}
 }
 

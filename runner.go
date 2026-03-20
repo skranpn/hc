@@ -27,11 +27,12 @@ func SetRequestTimeout(t int) RunnerOption {
 		r.timeout = time.Duration(t) * time.Second
 	}
 }
-func SetInterval(t int) RunnerOption {
-	return func(r *Runner) {
-		r.interval = time.Duration(t) * time.Millisecond
-	}
-}
+
+// func SetInterval(t int) RunnerOption {
+// 	return func(r *Runner) {
+// 		r.interval = time.Duration(t) * time.Millisecond
+// 	}
+// }
 
 type Runner struct {
 	client   HttpClient
@@ -43,7 +44,7 @@ type Runner struct {
 	stopOnFailure bool
 	stopOnError   bool
 	timeout       time.Duration
-	interval      time.Duration
+	// interval      time.Duration
 }
 
 func NewRunner(client HttpClient, vm *VariableManager, pauseCtl *PauseController, ch chan<- *Report, opts ...RunnerOption) *Runner {
@@ -72,14 +73,6 @@ func (r *Runner) RunWithContext(ctx context.Context, req *HttpRequest) (err erro
 		r.ch <- &Report{Req: req}
 		return nil
 	}
-
-	// request interval
-	// todo: batch 側に移したほうがよさそう
-	defer func() {
-		if r.interval > 0 {
-			sleep(ctx, r.interval)
-		}
-	}()
 
 	for {
 		err := r.run(ctx, req)

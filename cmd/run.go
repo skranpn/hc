@@ -111,7 +111,6 @@ var runCmd = &cobra.Command{
 			hc.SetStopOnFailure(runConfig.StopOnFailure),
 			hc.SetStopOnError(runConfig.StopOnError),
 			hc.SetRequestTimeout(runConfig.RequestTimeout),
-			hc.SetInterval(runConfig.Interval),
 		)
 
 		// 標準入力をRawモードに設定
@@ -141,7 +140,11 @@ var runCmd = &cobra.Command{
 		}()
 
 		// Execute requests (sequential or parallel)
-		batchRunner := hc.NewBatch(runner, runConfig.ParallelExecution, runConfig.BatchSize)
+		batchRunner := hc.NewBatch(runner, hc.BatchOption{
+			Parallel:    runConfig.ParallelExecution,
+			Concurrenty: runConfig.BatchSize,
+			Interval:    runConfig.Interval,
+		})
 		if err := batchRunner.Run(ctx, reqs); err != nil {
 			return err
 		}
@@ -162,7 +165,7 @@ func init() {
 	runCmd.Flags().StringVarP(&runConfig.Env, "env", "e", "", "Path to env file")
 	runCmd.Flags().StringVarP(&runConfig.Proxy, "proxy", "p", "", "Proxy URL")
 	runCmd.Flags().StringVarP(&runConfig.Out, "out", "o", "out", "Output directory for results")
-	runCmd.Flags().IntVarP(&runConfig.Interval, "interval", "i", 1000, "request interval, defaults to 1000 ms")
+	runCmd.Flags().StringVarP(&runConfig.Interval, "interval", "i", "1s", "request interval, defaults to 1s")
 	runCmd.Flags().StringSliceVarP(&runConfig.Only, "only", "", []string{}, "Execute only specified requests in the order they are given")
 	runCmd.Flags().BoolVar(&runConfig.StopOnFailure, "stop-on-failure", false, "Stop execution on assertion failure")
 	runCmd.Flags().BoolVar(&runConfig.StopOnError, "stop-on-error", false, "Stop execution on any error")
