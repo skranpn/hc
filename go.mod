@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-envparse v0.1.0
 	github.com/spf13/cobra v1.10.2
-	github.com/theory/jsonpath v0.11.0
+	github.com/theory/jsonpath v0.12.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/term v0.41.0
 )
